@@ -15,26 +15,80 @@ const API_URL = 'http://localhost:8000'
 
 /* ─── Vitals trend mini-chart (SVG sparkline) ─────────────────────── */
 function VitalsChart({ label, value, unit, min, max, color }) {
-  // Generate a fake sparkline from the single value for visual context
   const normalMin = min
   const normalMax = max
   const pct = Math.max(0, Math.min(100, ((value - normalMin) / (normalMax - normalMin)) * 100))
   const isAbnormal = value < normalMin || value > normalMax
 
+  // Generate sparkline data (simulated 24h trend)
+  const generateSparkline = () => {
+    const points = 24
+    const data = []
+    const variance = (normalMax - normalMin) * 0.1
+    
+    for (let i = 0; i < points; i++) {
+      const trend = (value - normalMin) / (normalMax - normalMin)
+      const noise = (Math.random() - 0.5) * variance
+      const point = value + noise
+      data.push(Math.max(normalMin, Math.min(normalMax, point)))
+    }
+    
+    // Ensure last point is the current value
+    data[data.length - 1] = value
+    return data
+  }
+
+  const sparklineData = generateSparkline()
+  const sparklinePoints = sparklineData.map((val, idx) => {
+    const x = (idx / (sparklineData.length - 1)) * 100
+    const y = 100 - ((val - normalMin) / (normalMax - normalMin)) * 100
+    return `${x},${y}`
+  }).join(' ')
+
   return (
-    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/50">
+    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/50 hover:border-slate-600/50 transition-all duration-300 group">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{label}</span>
-        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isAbnormal ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full transition-all duration-300 ${isAbnormal ? 'bg-amber-500/20 text-amber-400 animate-pulse' : 'bg-emerald-500/20 text-emerald-400'}`}>
           {isAbnormal ? 'Abnormal' : 'Normal'}
         </span>
       </div>
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-2 mb-3">
         <span className="text-3xl font-bold text-white">{typeof value === 'number' ? value.toFixed(1) : value}</span>
         <span className="text-sm text-slate-400 mb-1">{unit}</span>
       </div>
+      
+      {/* Sparkline trend */}
+      <div className="mb-3 h-10 relative">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full opacity-60 group-hover:opacity-100 transition-opacity duration-300">
+          <polyline
+            points={sparklinePoints}
+            fill="none"
+            stroke={isAbnormal ? '#f59e0b' : color}
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <polyline
+            points={sparklinePoints}
+            fill={isAbnormal ? 'url(#gradient-warn)' : `url(#gradient-${label})`}
+            opacity="0.2"
+          />
+          <defs>
+            <linearGradient id={`gradient-${label}`} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.5"/>
+              <stop offset="100%" stopColor={color} stopOpacity="0"/>
+            </linearGradient>
+            <linearGradient id="gradient-warn" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.5"/>
+              <stop offset="100%" stopColor="#f59e0b" stopOpacity="0"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      
       {/* Progress bar showing where value falls in range */}
-      <div className="mt-3 h-2 bg-slate-700 rounded-full overflow-hidden">
+      <div className="mt-2 h-2 bg-slate-700 rounded-full overflow-hidden relative">
         <div
           className="h-full rounded-full transition-all duration-700 ease-out"
           style={{
@@ -159,7 +213,7 @@ function ResultsView({ result, formData, onReset }) {
       </header>
 
       <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
-        {/* Risk Score Card */}
+        {/* Risk Score Card with Gauge */}
         <div className={`bg-gradient-to-br from-${riskColor}-900/40 to-${riskColor}-950/40 rounded-3xl p-6 border border-${riskColor}-700/30 shadow-xl`}
           style={{
             background: isLow
@@ -168,8 +222,46 @@ function ResultsView({ result, formData, onReset }) {
             borderColor: isLow ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)',
           }}>
           <div className="text-center">
-            <p className="text-sm font-medium text-slate-400 uppercase tracking-widest mb-2">Risk Level</p>
-            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-lg font-bold mb-3`}
+            <p className="text-sm font-medium text-slate-400 uppercase tracking-widest mb-4">Risk Level</p>
+            
+            {/* Circular Risk Gauge */}
+            <div className="relative w-40 h-40 mx-auto mb-4">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                {/* Background circle */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  fill="none"
+                  stroke="rgba(100,116,139,0.2)"
+                  strokeWidth="8"
+                />
+                {/* Progress circle */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  fill="none"
+                  stroke={isLow ? '#10b981' : '#f59e0b'}
+                  strokeWidth="8"
+                  strokeLinecap="round"
+                  strokeDasharray={`${result.risk_score * 251.2} 251.2`}
+                  className="transition-all duration-1000 ease-out"
+                  style={{
+                    filter: `drop-shadow(0 0 8px ${isLow ? '#10b98140' : '#f59e0b40'})`
+                  }}
+                />
+              </svg>
+              {/* Center text */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <div className="text-4xl font-black text-white mb-1">
+                  {(result.risk_score * 100).toFixed(0)}%
+                </div>
+                <div className="text-xs text-slate-400">Risk Score</div>
+              </div>
+            </div>
+            
+            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-lg font-bold mb-2`}
               style={{
                 backgroundColor: isLow ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)',
                 color: isLow ? '#6ee7b7' : '#fcd34d',
@@ -177,10 +269,7 @@ function ResultsView({ result, formData, onReset }) {
               <span className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: isLow ? '#10b981' : '#f59e0b' }} />
               {result.risk_level}
             </div>
-            <div className="text-5xl font-black text-white mb-1">
-              {(result.risk_score * 100).toFixed(0)}%
-            </div>
-            <p className="text-sm text-slate-400">Risk Score · Confidence: {(result.confidence * 100).toFixed(0)}%</p>
+            <p className="text-sm text-slate-400">Confidence: {(result.confidence * 100).toFixed(0)}%</p>
           </div>
         </div>
 
