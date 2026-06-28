@@ -1127,7 +1127,6 @@ async def jarvis_realtime_session(request: Request):
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": JARVIS_REALTIME_MODEL,
                     "session": session_config,
                 }
             )
