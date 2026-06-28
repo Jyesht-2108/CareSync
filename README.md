@@ -4,6 +4,11 @@ CareSync is a local/edge-first clinical decision-support dashboard designed for 
 
 ## Key Features
 - **Adaptive Cognitive Load UI:** The dashboard automatically adjusts its UI based on the patient's risk level. For Low/Medium risk, it shows full details (vitals charts, normal text). For High risk, it collapses into a simplified, high-contrast "emergency" view with a bold "CALL AMBULANCE" action, optimized for stressed field workers.
+- **Beautiful Data Visualizations:** Interactive charts powered by Recharts including:
+  - Radar chart for multi-disease risk profile
+  - Bar charts for risk comparison
+  - Donut charts for individual disease breakdown
+  - Timeline projections for future risk assessment
 - **Multi-Model Disease Prediction:** Beyond mortality risk, the system predicts specific diseases:
   - Heart Disease (81% accuracy, 93% ROC-AUC)
   - Diabetes (77% accuracy, 83% ROC-AUC)

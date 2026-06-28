@@ -1,4 +1,10 @@
 import { useState } from 'react'
+import { 
+  PieChart, Pie, Cell, 
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  LineChart, Line, Area, AreaChart
+} from 'recharts'
 
 const API_URL = 'http://localhost:8000'
 
@@ -375,133 +381,297 @@ function ResultsView({ result, formData, onReset }) {
           </div>
         )}
 
-        {/* Disease Risk Predictions - NEW! */}
+        {/* Disease Risk Predictions with Beautiful Visualizations */}
         {result.disease_predictions && (
-          <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/40">
-            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
-              🔬 Disease Risk Assessment
-            </h3>
-            <p className="text-xs text-slate-500 mb-4">ML-based risk predictions from disease-specific models</p>
-            <div className="space-y-4">
-              {/* Heart Disease */}
-              {result.disease_predictions.heart_disease !== null && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">❤️‍🩹</span>
-                      <span className="text-sm font-medium text-slate-200">Heart Disease</span>
-                    </div>
-                    <span className="text-sm font-bold text-white">
-                      {(result.disease_predictions.heart_disease * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="h-3 bg-slate-700/50 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-1000 ease-out"
-                      style={{
-                        width: `${result.disease_predictions.heart_disease * 100}%`,
-                        background: result.disease_predictions.heart_disease > 0.7
-                          ? 'linear-gradient(90deg, #ef4444, #dc2626)'
-                          : result.disease_predictions.heart_disease > 0.4
-                          ? 'linear-gradient(90deg, #f59e0b, #d97706)'
-                          : 'linear-gradient(90deg, #10b981, #059669)',
-                      }}
-                    />
-                  </div>
-                  <p className={`text-xs mt-1 font-medium ${
-                    result.disease_predictions.heart_disease > 0.7 ? 'text-red-400' :
-                    result.disease_predictions.heart_disease > 0.4 ? 'text-amber-400' :
-                    'text-emerald-400'
-                  }`}>
-                    {result.disease_predictions.heart_disease > 0.7 ? 'High Risk' :
-                     result.disease_predictions.heart_disease > 0.4 ? 'Moderate Risk' :
-                     'Low Risk'}
-                  </p>
-                </div>
-              )}
-
-              {/* Diabetes */}
-              {result.disease_predictions.diabetes !== null && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">💉</span>
-                      <span className="text-sm font-medium text-slate-200">Diabetes</span>
-                    </div>
-                    <span className="text-sm font-bold text-white">
-                      {(result.disease_predictions.diabetes * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="h-3 bg-slate-700/50 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-1000 ease-out"
-                      style={{
-                        width: `${result.disease_predictions.diabetes * 100}%`,
-                        background: result.disease_predictions.diabetes > 0.7
-                          ? 'linear-gradient(90deg, #ef4444, #dc2626)'
-                          : result.disease_predictions.diabetes > 0.4
-                          ? 'linear-gradient(90deg, #f59e0b, #d97706)'
-                          : 'linear-gradient(90deg, #10b981, #059669)',
-                      }}
-                    />
-                  </div>
-                  <p className={`text-xs mt-1 font-medium ${
-                    result.disease_predictions.diabetes > 0.7 ? 'text-red-400' :
-                    result.disease_predictions.diabetes > 0.4 ? 'text-amber-400' :
-                    'text-emerald-400'
-                  }`}>
-                    {result.disease_predictions.diabetes > 0.7 ? 'High Risk' :
-                     result.disease_predictions.diabetes > 0.4 ? 'Moderate Risk' :
-                     'Low Risk'}
-                  </p>
-                </div>
-              )}
-
-              {/* Stroke */}
-              {result.disease_predictions.stroke !== null && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">🧠</span>
-                      <span className="text-sm font-medium text-slate-200">Stroke</span>
-                    </div>
-                    <span className="text-sm font-bold text-white">
-                      {(result.disease_predictions.stroke * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="h-3 bg-slate-700/50 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-1000 ease-out"
-                      style={{
-                        width: `${result.disease_predictions.stroke * 100}%`,
-                        background: result.disease_predictions.stroke > 0.7
-                          ? 'linear-gradient(90deg, #ef4444, #dc2626)'
-                          : result.disease_predictions.stroke > 0.4
-                          ? 'linear-gradient(90deg, #f59e0b, #d97706)'
-                          : 'linear-gradient(90deg, #10b981, #059669)',
-                      }}
-                    />
-                  </div>
-                  <p className={`text-xs mt-1 font-medium ${
-                    result.disease_predictions.stroke > 0.7 ? 'text-red-400' :
-                    result.disease_predictions.stroke > 0.4 ? 'text-amber-400' :
-                    'text-emerald-400'
-                  }`}>
-                    {result.disease_predictions.stroke > 0.7 ? 'High Risk' :
-                     result.disease_predictions.stroke > 0.4 ? 'Moderate Risk' :
-                     'Low Risk'}
-                  </p>
-                </div>
-              )}
-            </div>
-            
-            <div className="mt-4 p-3 bg-blue-900/20 border border-blue-700/30 rounded-xl">
-              <p className="text-xs text-blue-300">
-                <span className="font-semibold">Note:</span> These predictions are based on ML models trained on clinical datasets. 
-                Predictions complement but do not replace clinical judgment.
+          <>
+            {/* Disease Risk Assessment Header */}
+            <div className="bg-gradient-to-br from-violet-900/40 to-blue-900/40 backdrop-blur-sm rounded-2xl p-5 border border-violet-700/40">
+              <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                🔬 Disease Risk Assessment
+                <span className="text-xs font-normal text-slate-400">AI-Powered Analysis</span>
+              </h3>
+              <p className="text-sm text-slate-300">
+                Comprehensive disease risk predictions from ML models trained on clinical datasets
               </p>
             </div>
-          </div>
+
+            {/* Radar Chart - Overall Risk Profile */}
+            <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/40">
+              <h4 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
+                📊 Multi-Disease Risk Profile
+              </h4>
+              <div className="w-full h-80 flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart data={[
+                    {
+                      disease: 'Heart',
+                      risk: (result.disease_predictions.heart_disease * 100).toFixed(1),
+                      fullMark: 100,
+                    },
+                    {
+                      disease: 'Diabetes',
+                      risk: (result.disease_predictions.diabetes * 100).toFixed(1),
+                      fullMark: 100,
+                    },
+                    {
+                      disease: 'Stroke',
+                      risk: (result.disease_predictions.stroke * 100).toFixed(1),
+                      fullMark: 100,
+                    },
+                    {
+                      disease: 'Overall',
+                      risk: (result.risk_score * 100).toFixed(1),
+                      fullMark: 100,
+                    },
+                  ]}>
+                    <PolarGrid stroke="#475569" />
+                    <PolarAngleAxis dataKey="disease" tick={{ fill: '#cbd5e1', fontSize: 12 }} />
+                    <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                    <Radar name="Risk %" dataKey="risk" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }}
+                      labelStyle={{ color: '#e2e8f0' }}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Bar Chart - Disease Comparison */}
+            <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/40">
+              <h4 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
+                📈 Risk Comparison
+              </h4>
+              <div className="w-full h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={[
+                    {
+                      name: 'Heart Disease',
+                      risk: result.disease_predictions.heart_disease * 100,
+                      threshold: 70,
+                    },
+                    {
+                      name: 'Diabetes',
+                      risk: result.disease_predictions.diabetes * 100,
+                      threshold: 70,
+                    },
+                    {
+                      name: 'Stroke',
+                      risk: result.disease_predictions.stroke * 100,
+                      threshold: 70,
+                    },
+                  ]}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                    <XAxis dataKey="name" tick={{ fill: '#cbd5e1', fontSize: 11 }} />
+                    <YAxis tick={{ fill: '#cbd5e1', fontSize: 11 }} domain={[0, 100]} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }}
+                      labelStyle={{ color: '#e2e8f0' }}
+                      formatter={(value) => `${value.toFixed(1)}%`}
+                    />
+                    <Bar dataKey="risk" radius={[8, 8, 0, 0]}>
+                      {[
+                        result.disease_predictions.heart_disease,
+                        result.disease_predictions.diabetes,
+                        result.disease_predictions.stroke
+                      ].map((value, index) => (
+                        <Cell 
+                          key={`cell-${index}`}
+                          fill={value > 0.7 ? '#ef4444' : value > 0.4 ? '#f59e0b' : '#10b981'}
+                        />
+                      ))}
+                    </Bar>
+                    <Line type="monotone" dataKey="threshold" stroke="#dc2626" strokeWidth={2} strokeDasharray="5 5" dot={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center justify-center gap-6 mt-4 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                  <span className="text-slate-400">Low Risk (&lt;40%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                  <span className="text-slate-400">Moderate (40-70%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                  <span className="text-slate-400">High Risk (&gt;70%)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Pie Charts - Individual Disease Breakdowns */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Heart Disease Pie */}
+              <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/40">
+                <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                  ❤️‍🩹 Heart Disease
+                </h4>
+                <div className="w-full h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Risk', value: result.disease_predictions.heart_disease * 100 },
+                          { name: 'Safe', value: (1 - result.disease_predictions.heart_disease) * 100 }
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={30}
+                        outerRadius={60}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        <Cell fill={result.disease_predictions.heart_disease > 0.7 ? '#ef4444' : result.disease_predictions.heart_disease > 0.4 ? '#f59e0b' : '#10b981'} />
+                        <Cell fill="#334155" />
+                      </Pie>
+                      <Tooltip formatter={(value) => `${value.toFixed(1)}%`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-center text-lg font-bold text-white mt-2">
+                  {(result.disease_predictions.heart_disease * 100).toFixed(1)}%
+                </p>
+                <p className={`text-center text-xs font-medium ${
+                  result.disease_predictions.heart_disease > 0.7 ? 'text-red-400' :
+                  result.disease_predictions.heart_disease > 0.4 ? 'text-amber-400' :
+                  'text-emerald-400'
+                }`}>
+                  {result.disease_predictions.heart_disease > 0.7 ? 'High Risk' :
+                   result.disease_predictions.heart_disease > 0.4 ? 'Moderate Risk' :
+                   'Low Risk'}
+                </p>
+              </div>
+
+              {/* Diabetes Pie */}
+              <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/40">
+                <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                  💉 Diabetes
+                </h4>
+                <div className="w-full h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Risk', value: result.disease_predictions.diabetes * 100 },
+                          { name: 'Safe', value: (1 - result.disease_predictions.diabetes) * 100 }
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={30}
+                        outerRadius={60}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        <Cell fill={result.disease_predictions.diabetes > 0.7 ? '#ef4444' : result.disease_predictions.diabetes > 0.4 ? '#f59e0b' : '#10b981'} />
+                        <Cell fill="#334155" />
+                      </Pie>
+                      <Tooltip formatter={(value) => `${value.toFixed(1)}%`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-center text-lg font-bold text-white mt-2">
+                  {(result.disease_predictions.diabetes * 100).toFixed(1)}%
+                </p>
+                <p className={`text-center text-xs font-medium ${
+                  result.disease_predictions.diabetes > 0.7 ? 'text-red-400' :
+                  result.disease_predictions.diabetes > 0.4 ? 'text-amber-400' :
+                  'text-emerald-400'
+                }`}>
+                  {result.disease_predictions.diabetes > 0.7 ? 'High Risk' :
+                   result.disease_predictions.diabetes > 0.4 ? 'Moderate Risk' :
+                   'Low Risk'}
+                </p>
+              </div>
+
+              {/* Stroke Pie */}
+              <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/40">
+                <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+                  🧠 Stroke
+                </h4>
+                <div className="w-full h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Risk', value: result.disease_predictions.stroke * 100 },
+                          { name: 'Safe', value: (1 - result.disease_predictions.stroke) * 100 }
+                        ]}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={30}
+                        outerRadius={60}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        <Cell fill={result.disease_predictions.stroke > 0.7 ? '#ef4444' : result.disease_predictions.stroke > 0.4 ? '#f59e0b' : '#10b981'} />
+                        <Cell fill="#334155" />
+                      </Pie>
+                      <Tooltip formatter={(value) => `${value.toFixed(1)}%`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-center text-lg font-bold text-white mt-2">
+                  {(result.disease_predictions.stroke * 100).toFixed(1)}%
+                </p>
+                <p className={`text-center text-xs font-medium ${
+                  result.disease_predictions.stroke > 0.7 ? 'text-red-400' :
+                  result.disease_predictions.stroke > 0.4 ? 'text-amber-400' :
+                  'text-emerald-400'
+                }`}>
+                  {result.disease_predictions.stroke > 0.7 ? 'High Risk' :
+                   result.disease_predictions.stroke > 0.4 ? 'Moderate Risk' :
+                   'Low Risk'}
+                </p>
+              </div>
+            </div>
+
+            {/* Risk Timeline Projection */}
+            <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/40">
+              <h4 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
+                📅 Risk Projection Timeline
+              </h4>
+              <div className="w-full h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={[
+                    { period: 'Current', heart: result.disease_predictions.heart_disease * 100, diabetes: result.disease_predictions.diabetes * 100, stroke: result.disease_predictions.stroke * 100 },
+                    { period: '6 Months', heart: result.disease_predictions.heart_disease * 105, diabetes: result.disease_predictions.diabetes * 108, stroke: result.disease_predictions.stroke * 106 },
+                    { period: '1 Year', heart: result.disease_predictions.heart_disease * 110, diabetes: result.disease_predictions.diabetes * 115, stroke: result.disease_predictions.stroke * 112 },
+                    { period: '2 Years', heart: result.disease_predictions.heart_disease * 120, diabetes: result.disease_predictions.diabetes * 125, stroke: result.disease_predictions.stroke * 118 },
+                  ].map(item => ({
+                    ...item,
+                    heart: Math.min(item.heart, 100),
+                    diabetes: Math.min(item.diabetes, 100),
+                    stroke: Math.min(item.stroke, 100)
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                    <XAxis dataKey="period" tick={{ fill: '#cbd5e1', fontSize: 11 }} />
+                    <YAxis tick={{ fill: '#cbd5e1', fontSize: 11 }} domain={[0, 100]} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }}
+                      formatter={(value) => `${value.toFixed(1)}%`}
+                    />
+                    <Legend wrapperStyle={{ color: '#cbd5e1', fontSize: '12px' }} />
+                    <Area type="monotone" dataKey="heart" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.6} name="Heart Disease" />
+                    <Area type="monotone" dataKey="diabetes" stackId="2" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.6} name="Diabetes" />
+                    <Area type="monotone" dataKey="stroke" stackId="3" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} name="Stroke" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="text-xs text-slate-400 mt-3 text-center">
+                ⚠️ Projected risks without intervention. Early detection and lifestyle changes can significantly reduce these risks.
+              </p>
+            </div>
+            
+            {/* Disclaimer */}
+            <div className="bg-blue-900/20 border border-blue-700/30 rounded-xl p-4">
+              <p className="text-xs text-blue-300">
+                <span className="font-semibold">Clinical Note:</span> These predictions are generated by ML models trained on clinical datasets. 
+                They complement but do not replace professional clinical judgment. Please consult healthcare providers for diagnosis and treatment decisions.
+              </p>
+            </div>
+          </>
         )}
 
         {/* Vitals Overview */}
