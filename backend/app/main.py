@@ -1083,6 +1083,7 @@ Current patient context:"""
 def build_jarvis_realtime_session_config(risk_context: dict | None = None) -> dict:
     """OpenAI Realtime session config for natural speech-to-speech."""
     return {
+        "type": "realtime",
         "model": JARVIS_REALTIME_MODEL,
         "instructions": build_jarvis_system_prompt(risk_context),
         "voice": JARVIS_REALTIME_VOICE,
