@@ -1140,6 +1140,7 @@ async def jarvis_realtime_session(request: Request):
             ephemeral_token = session_data.get("client_secret", {}).get("value")
             
             if not ephemeral_token:
+                print(f"\n\n=== JARVIS OPENAI TOKEN MISSING ===\n{token_response.text}\n===================================\n\n")
                 raise HTTPException(
                     status_code=500,
                     detail="Failed to get ephemeral token from OpenAI"
