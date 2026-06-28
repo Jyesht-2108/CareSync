@@ -1161,7 +1161,7 @@ async def jarvis_realtime_session(request: Request):
                 content=sdp_offer,
             )
 
-        if sdp_response.status_code != 200:
+        if not sdp_response.is_success:
             raise HTTPException(
                 status_code=sdp_response.status_code,
                 detail=f"OpenAI Realtime error: {sdp_response.text}",
