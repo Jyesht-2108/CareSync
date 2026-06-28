@@ -1083,16 +1083,11 @@ Current patient context:"""
 def build_jarvis_realtime_session_config(risk_context: dict | None = None) -> dict:
     """OpenAI Realtime session config for natural speech-to-speech."""
     return {
-        "type": "realtime",
         "model": JARVIS_REALTIME_MODEL,
         "instructions": build_jarvis_system_prompt(risk_context),
-        "audio": {
-            "input": {
-                "turn_detection": {"type": "semantic_vad"},
-                "transcription": {"model": "whisper-1"},
-            },
-            "output": {"voice": JARVIS_REALTIME_VOICE},
-        },
+        "voice": JARVIS_REALTIME_VOICE,
+        "turn_detection": {"type": "server_vad"},
+        "input_audio_transcription": {"model": "whisper-1"},
     }
 
 
@@ -1126,14 +1121,14 @@ async def jarvis_realtime_session(request: Request):
         # Step 1: Create ephemeral token for WebRTC
         async with httpx.AsyncClient(timeout=30.0) as client:
             token_response = await client.post(
-                "https://api.openai.com/v1/realtime/sessions",
+                "https://api.openai.com/v1/realtime/client_secrets",
                 headers={
                     "Authorization": f"Bearer {OPENAI_API_KEY}",
                     "Content-Type": "application/json",
                 },
                 json={
                     "model": JARVIS_REALTIME_MODEL,
-                    "voice": JARVIS_REALTIME_VOICE,
+                    "session": session_config,
                 }
             )
 
