@@ -1133,6 +1133,7 @@ async def jarvis_realtime_session(request: Request):
             )
 
             if token_response.status_code != 200:
+                print(f"\n\n=== JARVIS OPENAI TOKEN ERROR ===\n{token_response.text}\n=================================\n\n")
                 raise HTTPException(
                     status_code=token_response.status_code,
                     detail=f"OpenAI session creation error: {token_response.text}",
