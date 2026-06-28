@@ -991,7 +991,7 @@ else:
     print(f"    Looking for .env at: {env_path}")
 
 
-JARVIS_REALTIME_MODEL = "gpt-4o-realtime-preview-2024-12-17"
+JARVIS_REALTIME_MODEL = "gpt-realtime-2"
 JARVIS_REALTIME_VOICE = "alloy"  # Natural, conversational voice
 
 
