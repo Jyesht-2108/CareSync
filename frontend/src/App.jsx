@@ -5,6 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line, Area, AreaChart
 } from 'recharts'
+import JarvisAssistant from './JarvisAssistant'
 
 const API_URL = 'http://localhost:8000'
 
@@ -1025,6 +1026,24 @@ export default function App() {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
+  // Load sample high-risk patient data
+  const loadSampleData = () => {
+    setFormData({
+      heart_rate: '95',
+      systolic_bp: '165',
+      diastolic_bp: '98',
+      temperature: '37.8',
+      spo2: '92',
+      age: '68',
+      gender: 'Male',
+      smoking_status: 'Current',
+      diabetes: 'Yes',
+      hypertension: 'Yes',
+      ehr_notes: 'Patient complains of chest discomfort and shortness of breath. History of coronary artery disease.',
+      clinical_summary: 'Presents with elevated BP, tachycardia, mild hypoxia. Known cardiovascular risk factors.',
+    })
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -1149,7 +1168,15 @@ export default function App() {
 
   // ─── Results View (Always show detailed view now) ────────────────
   if (result) {
-    return <ResultsView result={result} formData={formData} onReset={resetForm} />
+    return (
+      <>
+        <ResultsView result={result} formData={formData} onReset={resetForm} />
+        <JarvisAssistant 
+          riskAssessmentData={result}
+          patientData={formData}
+        />
+      </>
+    )
   }
 
   // ─── Input Form ───────────────────────────────────────────────
@@ -1173,6 +1200,20 @@ export default function App() {
       </header>
 
       <form onSubmit={handleSubmit} className="max-w-lg mx-auto px-4 pt-6 space-y-6">
+        {/* Sample Data Button */}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={loadSampleData}
+            className="flex items-center gap-2 bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 text-violet-300 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Load Sample Data
+          </button>
+        </div>
+
         {/* Vitals Section */}
         <section>
           <div className="flex items-center gap-2 mb-4">

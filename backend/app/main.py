@@ -8,18 +8,28 @@ The ML model, TF-IDF vectorizer, and all preprocessing artifacts are
 loaded from local disk at startup. NO patient data is transmitted to
 any external API, LLM service, or cloud endpoint at any point.
 
+NOTE: The JARVIS voice assistant feature uses OpenAI's API for conversational
+AI, which does require an API key and external connectivity. This is an optional
+feature for enhanced user experience.
+
 Endpoints:
   POST /api/evaluate-risk — Run risk assessment on a patient
-  GET  /health            — Liveness check
+  POST /api/jarvis/chat            — Text chat with JARVIS (fallback)
+  POST /api/jarvis/realtime-session — WebRTC Realtime voice session
+  GET  /health                     — Liveness check
 """
 
+import json
 import os
 import numpy as np
 from pathlib import Path
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
 
+import httpx
 import joblib
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from scipy.sparse import csr_matrix, hstack
 
@@ -964,12 +974,274 @@ def _humanize_feature(feature_name: str) -> str:
     return mapping.get(feature_name, feature_name.replace("_", " ").title())
 
 
+# ═══ OpenAI Setup for JARVIS Assistant ═══
+# Load .env file from backend directory
+backend_dir = Path(__file__).resolve().parent.parent
+env_path = backend_dir / '.env'
+load_dotenv(dotenv_path=env_path)
+
+# Get API key
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai_available = OPENAI_API_KEY and OPENAI_API_KEY != "your_openai_api_key_here"
+
+if openai_available:
+    print("✅ OpenAI API key loaded for JARVIS assistant")
+else:
+    print("⚠️  OPENAI_API_KEY not configured - JARVIS feature will be unavailable")
+    print(f"    Looking for .env at: {env_path}")
+
+
+JARVIS_REALTIME_MODEL = "gpt-4o-realtime-preview-2024-12-17"
+JARVIS_REALTIME_VOICE = "alloy"  # Natural, conversational voice
+
+
+def format_risk_context_for_jarvis(risk_context: dict) -> str:
+    """Format the current risk assessment for JARVIS context."""
+    context_str = "\n\n--- CURRENT PATIENT ASSESSMENT ---\n"
+    
+    if "risk_level" in risk_context:
+        context_str += f"Overall Risk Level: {risk_context['risk_level']}"
+        if "risk_score" in risk_context:
+            context_str += f" ({risk_context['risk_score']*100:.1f}%)"
+        context_str += "\n"
+    
+    if "vitals" in risk_context:
+        v = risk_context["vitals"]
+        context_str += f"\nVital Signs:\n"
+        context_str += f"- Heart Rate: {v.get('heart_rate', 'N/A')} bpm\n"
+        context_str += f"- Blood Pressure: {v.get('systolic_bp', 'N/A')}/{v.get('diastolic_bp', 'N/A')} mmHg\n"
+        context_str += f"- SpO2: {v.get('spo2', 'N/A')}%\n"
+        context_str += f"- Temperature: {v.get('temperature', 'N/A')}°C\n"
+    
+    if "demographics" in risk_context:
+        d = risk_context["demographics"]
+        context_str += f"\nPatient Info:\n"
+        context_str += f"- Age: {d.get('age', 'N/A')}\n"
+        context_str += f"- Diabetes: {d.get('diabetes', 'N/A')}\n"
+        context_str += f"- Hypertension: {d.get('hypertension', 'N/A')}\n"
+    
+    if "disease_predictions" in risk_context:
+        dp = risk_context["disease_predictions"]
+        context_str += f"\nDisease Risk Predictions:\n"
+        if dp.get("heart_disease"):
+            context_str += f"- Heart Disease: {dp['heart_disease']*100:.1f}%\n"
+        if dp.get("diabetes"):
+            context_str += f"- Diabetes: {dp['diabetes']*100:.1f}%\n"
+        if dp.get("stroke"):
+            context_str += f"- Stroke: {dp['stroke']*100:.1f}%\n"
+    
+    if "clinical_conditions" in risk_context:
+        cc = risk_context["clinical_conditions"]
+        if cc.get("news2_score") is not None:
+            context_str += f"\nNEWS2 Score: {cc['news2_score']} ({cc.get('news2_risk', 'N/A')} Risk)\n"
+        if cc.get("primary_assessment"):
+            context_str += f"Assessment: {cc['primary_assessment']}\n"
+    
+    context_str += "\n--- END ASSESSMENT ---\n"
+    return context_str
+
+
+def build_jarvis_system_prompt(risk_context: dict | None = None) -> str:
+    """System instructions for JARVIS — shared by text chat and Realtime voice."""
+    prompt = """You are JARVIS, a conversational AI medical assistant helping healthcare workers in India.
+
+Your personality:
+- Natural and warm — like talking to an experienced colleague
+- Confident but never pushy
+- Direct without being robotic
+- Think of yourself as a helpful partner, not a textbook
+
+How you communicate:
+- Speak naturally with contractions and casual flow (you're, it's, that's)
+- Keep sentences short and conversational when speaking
+- Answer directly first, then add context if needed
+- Use simple language and explain medical terms naturally
+- Hinglish is perfectly fine when it helps
+- Reference this specific patient's data when answering
+
+Important guidelines:
+- The UI already shows a one-time disclaimer — you don't need to repeat it
+- Only mention consulting a doctor or emergency services when it's genuinely urgent
+- Trust the healthcare worker — they know when to escalate
+- Be helpful and informative, not a walking liability warning
+
+When discussing risk levels:
+- HIGH risk → Be clear and direct about needing immediate attention, cite specific concerns
+- MEDIUM risk → Suggest seeing a doctor within a day, mention what to watch
+- LOW risk → Reassure but note routine monitoring
+
+Current patient context:"""
+
+    if risk_context:
+        prompt += format_risk_context_for_jarvis(risk_context)
+    else:
+        prompt += "\nNo assessment loaded yet."
+
+    return prompt
+
+
+def build_jarvis_realtime_session_config(risk_context: dict | None = None) -> dict:
+    """OpenAI Realtime session config for natural speech-to-speech."""
+    return {
+        "type": "realtime",
+        "model": JARVIS_REALTIME_MODEL,
+        "instructions": build_jarvis_system_prompt(risk_context),
+        "audio": {
+            "input": {
+                "turn_detection": {"type": "semantic_vad"},
+                "transcription": {"model": "whisper-1"},
+            },
+            "output": {"voice": JARVIS_REALTIME_VOICE},
+        },
+    }
+
+
+@app.post("/api/jarvis/realtime-session", response_class=PlainTextResponse)
+async def jarvis_realtime_session(request: Request):
+    """
+    Establish an OpenAI Realtime WebRTC session (unified interface).
+
+    Browser sends its SDP offer + patient context; we forward to OpenAI
+    with JARVIS instructions and return the SDP answer.
+    """
+    if not openai_available:
+        raise HTTPException(
+            status_code=503,
+            detail="JARVIS Realtime is not available. OpenAI API key not configured.",
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=422, detail="Expected JSON body with sdp and risk_assessment_context")
+
+    sdp_offer = body.get("sdp")
+    if not sdp_offer:
+        raise HTTPException(status_code=422, detail="Missing SDP offer")
+
+    risk_context = body.get("risk_assessment_context") or {}
+    session_config = build_jarvis_realtime_session_config(risk_context)
+
+    try:
+        # Step 1: Create ephemeral token for WebRTC
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            token_response = await client.post(
+                "https://api.openai.com/v1/realtime/sessions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": JARVIS_REALTIME_MODEL,
+                    "voice": JARVIS_REALTIME_VOICE,
+                }
+            )
+
+            if token_response.status_code != 200:
+                raise HTTPException(
+                    status_code=token_response.status_code,
+                    detail=f"OpenAI session creation error: {token_response.text}",
+                )
+
+            session_data = token_response.json()
+            ephemeral_token = session_data.get("client_secret", {}).get("value")
+            
+            if not ephemeral_token:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to get ephemeral token from OpenAI"
+                )
+
+            # Step 2: Use ephemeral token to exchange SDP
+            sdp_response = await client.post(
+                f"https://api.openai.com/v1/realtime?model={JARVIS_REALTIME_MODEL}",
+                headers={
+                    "Authorization": f"Bearer {ephemeral_token}",
+                    "Content-Type": "application/sdp",
+                },
+                content=sdp_offer,
+            )
+
+        if sdp_response.status_code != 200:
+            raise HTTPException(
+                status_code=sdp_response.status_code,
+                detail=f"OpenAI Realtime error: {sdp_response.text}",
+            )
+
+        return PlainTextResponse(content=sdp_response.text, media_type="application/sdp")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"JARVIS Realtime session error: {str(e)}")
+
+
+@app.post("/api/jarvis/chat")
+async def jarvis_chat(request: dict):
+    """Text fallback for JARVIS when Realtime voice is unavailable."""
+    if not openai_available:
+        raise HTTPException(
+            status_code=503,
+            detail="JARVIS assistant is not available. OpenAI API key not configured.",
+        )
+
+    try:
+        user_message = request.get("message", "")
+        risk_context = request.get("risk_assessment_context", {})
+        conversation_history = request.get("conversation_history", [])
+        system_prompt = build_jarvis_system_prompt(risk_context)
+
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in conversation_history[-6:]:
+            messages.append(msg)
+        messages.append({"role": "user", "content": user_message})
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "gpt-4o",
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 500,
+                },
+            )
+
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"OpenAI API error: {response.text}",
+                )
+
+            data = response.json()
+            assistant_message = data["choices"][0]["message"]["content"]
+
+        return {
+            "success": True,
+            "message": assistant_message,
+            "role": "assistant",
+            "model": "gpt-4o",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"JARVIS assistant error: {str(e)}")
+
+
 @app.get("/health")
 async def health_check():
     """Basic liveness check — confirms model is loaded and ready."""
     return {
         "status": "healthy",
         "model_loaded": model is not None,
+        "jarvis_available": openai_available,
+        "jarvis_mode": "openai-realtime-webrtc" if openai_available else None,
+        "jarvis_voice": JARVIS_REALTIME_VOICE if openai_available else None,
         "service": "CareSync",
-        "privacy": "All processing is local — no data leaves this device",
+        "privacy": "All processing is local — no data leaves this device (except optional JARVIS feature)",
     }
