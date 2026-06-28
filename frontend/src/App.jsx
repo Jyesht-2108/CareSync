@@ -301,6 +301,209 @@ function ResultsView({ result, formData, onReset }) {
           </div>
         </div>
 
+        {/* Clinical Conditions */}
+        {result.clinical_conditions && (
+          <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/40">
+            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
+              🩺 Clinical Indicators
+            </h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-slate-900/30 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🦠</span>
+                  <span className="text-sm text-slate-300">Sepsis/Infection</span>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  result.clinical_conditions.sepsis_risk === 'High' ? 'bg-red-500/20 text-red-400' :
+                  result.clinical_conditions.sepsis_risk === 'Moderate' ? 'bg-amber-500/20 text-amber-400' :
+                  'bg-emerald-500/20 text-emerald-400'
+                }`}>
+                  {result.clinical_conditions.sepsis_risk}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-slate-900/30 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🫁</span>
+                  <span className="text-sm text-slate-300">Respiratory Function</span>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  result.clinical_conditions.respiratory_concern ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'
+                }`}>
+                  {result.clinical_conditions.respiratory_concern ? 'Impaired' : 'Normal'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-slate-900/30 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">❤️</span>
+                  <span className="text-sm text-slate-300">Cardiovascular</span>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  result.clinical_conditions.cardiovascular_risk === 'Elevated' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'
+                }`}>
+                  {result.clinical_conditions.cardiovascular_risk}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-slate-900/30 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🫀</span>
+                  <span className="text-sm text-slate-300">Organ Function</span>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  result.clinical_conditions.organ_function?.includes('Severe') ? 'bg-red-500/20 text-red-400' :
+                  result.clinical_conditions.organ_function?.includes('Moderate') ? 'bg-amber-500/20 text-amber-400' :
+                  'bg-emerald-500/20 text-emerald-400'
+                }`}>
+                  {result.clinical_conditions.organ_function}
+                </span>
+              </div>
+
+              {result.clinical_conditions.requires_icu && (
+                <div className="mt-4 p-4 bg-red-900/20 border border-red-700/30 rounded-xl">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">🏥</span>
+                    <span className="text-sm font-bold text-red-400">ICU Care Recommended</span>
+                  </div>
+                  <p className="text-xs text-red-300 mt-2">
+                    Multiple severe indicators detected - intensive care may be required
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Disease Risk Predictions - NEW! */}
+        {result.disease_predictions && (
+          <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/40">
+            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
+              🔬 Disease Risk Assessment
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">ML-based risk predictions from disease-specific models</p>
+            <div className="space-y-4">
+              {/* Heart Disease */}
+              {result.disease_predictions.heart_disease !== null && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">❤️‍🩹</span>
+                      <span className="text-sm font-medium text-slate-200">Heart Disease</span>
+                    </div>
+                    <span className="text-sm font-bold text-white">
+                      {(result.disease_predictions.heart_disease * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-3 bg-slate-700/50 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-1000 ease-out"
+                      style={{
+                        width: `${result.disease_predictions.heart_disease * 100}%`,
+                        background: result.disease_predictions.heart_disease > 0.7
+                          ? 'linear-gradient(90deg, #ef4444, #dc2626)'
+                          : result.disease_predictions.heart_disease > 0.4
+                          ? 'linear-gradient(90deg, #f59e0b, #d97706)'
+                          : 'linear-gradient(90deg, #10b981, #059669)',
+                      }}
+                    />
+                  </div>
+                  <p className={`text-xs mt-1 font-medium ${
+                    result.disease_predictions.heart_disease > 0.7 ? 'text-red-400' :
+                    result.disease_predictions.heart_disease > 0.4 ? 'text-amber-400' :
+                    'text-emerald-400'
+                  }`}>
+                    {result.disease_predictions.heart_disease > 0.7 ? 'High Risk' :
+                     result.disease_predictions.heart_disease > 0.4 ? 'Moderate Risk' :
+                     'Low Risk'}
+                  </p>
+                </div>
+              )}
+
+              {/* Diabetes */}
+              {result.disease_predictions.diabetes !== null && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">💉</span>
+                      <span className="text-sm font-medium text-slate-200">Diabetes</span>
+                    </div>
+                    <span className="text-sm font-bold text-white">
+                      {(result.disease_predictions.diabetes * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-3 bg-slate-700/50 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-1000 ease-out"
+                      style={{
+                        width: `${result.disease_predictions.diabetes * 100}%`,
+                        background: result.disease_predictions.diabetes > 0.7
+                          ? 'linear-gradient(90deg, #ef4444, #dc2626)'
+                          : result.disease_predictions.diabetes > 0.4
+                          ? 'linear-gradient(90deg, #f59e0b, #d97706)'
+                          : 'linear-gradient(90deg, #10b981, #059669)',
+                      }}
+                    />
+                  </div>
+                  <p className={`text-xs mt-1 font-medium ${
+                    result.disease_predictions.diabetes > 0.7 ? 'text-red-400' :
+                    result.disease_predictions.diabetes > 0.4 ? 'text-amber-400' :
+                    'text-emerald-400'
+                  }`}>
+                    {result.disease_predictions.diabetes > 0.7 ? 'High Risk' :
+                     result.disease_predictions.diabetes > 0.4 ? 'Moderate Risk' :
+                     'Low Risk'}
+                  </p>
+                </div>
+              )}
+
+              {/* Stroke */}
+              {result.disease_predictions.stroke !== null && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🧠</span>
+                      <span className="text-sm font-medium text-slate-200">Stroke</span>
+                    </div>
+                    <span className="text-sm font-bold text-white">
+                      {(result.disease_predictions.stroke * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-3 bg-slate-700/50 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-1000 ease-out"
+                      style={{
+                        width: `${result.disease_predictions.stroke * 100}%`,
+                        background: result.disease_predictions.stroke > 0.7
+                          ? 'linear-gradient(90deg, #ef4444, #dc2626)'
+                          : result.disease_predictions.stroke > 0.4
+                          ? 'linear-gradient(90deg, #f59e0b, #d97706)'
+                          : 'linear-gradient(90deg, #10b981, #059669)',
+                      }}
+                    />
+                  </div>
+                  <p className={`text-xs mt-1 font-medium ${
+                    result.disease_predictions.stroke > 0.7 ? 'text-red-400' :
+                    result.disease_predictions.stroke > 0.4 ? 'text-amber-400' :
+                    'text-emerald-400'
+                  }`}>
+                    {result.disease_predictions.stroke > 0.7 ? 'High Risk' :
+                     result.disease_predictions.stroke > 0.4 ? 'Moderate Risk' :
+                     'Low Risk'}
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <div className="mt-4 p-3 bg-blue-900/20 border border-blue-700/30 rounded-xl">
+              <p className="text-xs text-blue-300">
+                <span className="font-semibold">Note:</span> These predictions are based on ML models trained on clinical datasets. 
+                Predictions complement but do not replace clinical judgment.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Vitals Overview */}
         <div>
           <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-3 px-1">Current Vitals</h3>
@@ -360,6 +563,19 @@ export default function App() {
     setLoading(true)
     setError(null)
 
+    // Client-side validation
+    const requiredFields = [
+      'heart_rate', 'systolic_bp', 'diastolic_bp', 'temperature', 'spo2', 'age'
+    ]
+    
+    for (const field of requiredFields) {
+      if (!formData[field] || formData[field] === '') {
+        setError(`Please fill in all required fields. Missing: ${field.replace(/_/g, ' ').toUpperCase()}`)
+        setLoading(false)
+        return
+      }
+    }
+
     const payload = {
       vitals: {
         heart_rate: parseFloat(formData.heart_rate),
@@ -379,6 +595,15 @@ export default function App() {
       clinical_summary: formData.clinical_summary || '',
     }
 
+    // Validate parsed numbers
+    if (isNaN(payload.vitals.heart_rate) || isNaN(payload.vitals.systolic_bp) || 
+        isNaN(payload.vitals.diastolic_bp) || isNaN(payload.vitals.temperature) || 
+        isNaN(payload.vitals.spo2) || isNaN(payload.demographics.age)) {
+      setError('Please enter valid numbers for all vitals and age fields')
+      setLoading(false)
+      return
+    }
+
     try {
       const res = await fetch(`${API_URL}/api/evaluate-risk`, {
         method: 'POST',
@@ -387,12 +612,30 @@ export default function App() {
       })
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.detail || `Server error: ${res.status}`)
+        let errorMessage = `Server error: ${res.status}`
+        
+        if (errData.detail) {
+          if (typeof errData.detail === 'string') {
+            errorMessage = errData.detail
+          } else if (Array.isArray(errData.detail)) {
+            // Pydantic validation errors are arrays
+            const errors = errData.detail.map(err => {
+              const field = err.loc ? err.loc.join(' → ') : 'Unknown field'
+              return `${field}: ${err.msg}`
+            })
+            errorMessage = errors.join('\n')
+          } else {
+            errorMessage = JSON.stringify(errData.detail)
+          }
+        }
+        throw new Error(errorMessage)
       }
       const data = await res.json()
       setResult(data)
     } catch (err) {
-      setError(err.message || 'Failed to connect to the CareSync backend')
+      console.error('API Error:', err)
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      setError(errorMessage || 'Failed to connect to the CareSync backend')
     } finally {
       setLoading(false)
     }
@@ -595,7 +838,7 @@ export default function App() {
         {error && (
           <div className="bg-red-900/30 border border-red-700/50 rounded-xl p-4 text-red-300 text-sm">
             <p className="font-medium">⚠ Error</p>
-            <p className="mt-1 text-red-400">{error}</p>
+            <pre className="mt-1 text-red-400 whitespace-pre-wrap font-sans">{error}</pre>
           </div>
         )}
 

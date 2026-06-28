@@ -1,2 +1,45 @@
-/datasets
-/venv
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+venv/
+env/
+ENV/
+
+# Datasets (large files, not for GitHub)
+/datasets/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# Node modules
+node_modules/
+
+# Build outputs
+/frontend/dist/
+/frontend/build/
+
+# Temporary files
+*.tmp
+*.bak

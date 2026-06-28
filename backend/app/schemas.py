@@ -64,7 +64,7 @@ class ContributingFactor(BaseModel):
 
 class RiskAssessmentResponse(BaseModel):
     """
-    Risk assessment output.
+    Risk assessment output with clinical condition indicators and disease predictions.
     
     Thresholds (documented assumption):
       - High:   probability >= 0.5 for class 2
@@ -73,8 +73,24 @@ class RiskAssessmentResponse(BaseModel):
     
     These thresholds are intentionally aggressive for High-risk to minimize
     missed deteriorating patients (the key safety requirement).
+    
+    Clinical conditions are rule-based indicators derived from vitals and
+    clinical notes - these help contextualize the risk prediction.
+    
+    Disease predictions use ML models trained on disease-specific datasets:
+    - heart_disease: probability of heart disease (0-1)
+    - diabetes: probability of diabetes (0-1)
+    - stroke: probability of stroke (0-1)
     """
     risk_score: float = Field(..., description="Risk probability 0-1 (higher = more risk)")
     risk_level: str = Field(..., description="Low / Medium / High")
     contributing_factors: List[ContributingFactor]
     confidence: float = Field(..., description="Model confidence in the prediction")
+    clinical_conditions: dict = Field(
+        default_factory=dict,
+        description="Specific clinical condition indicators (sepsis, respiratory, etc.)"
+    )
+    disease_predictions: dict = Field(
+        default_factory=dict,
+        description="Disease-specific risk predictions (heart_disease, diabetes, stroke)"
+    )

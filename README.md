@@ -4,8 +4,13 @@ CareSync is a local/edge-first clinical decision-support dashboard designed for 
 
 ## Key Features
 - **Adaptive Cognitive Load UI:** The dashboard automatically adjusts its UI based on the patient's risk level. For Low/Medium risk, it shows full details (vitals charts, normal text). For High risk, it collapses into a simplified, high-contrast "emergency" view with a bold "CALL AMBULANCE" action, optimized for stressed field workers.
-- **Privacy-Preserving (Local-First):** All processing happens on-device. No patient data is sent to external APIs (like OpenAI/HuggingFace/cloud services). The model uses a locally trained Logistic Regression model and TF-IDF for text.
-- **High-Performance ML Model:** Trained on 4,290 patients with 87% accuracy and 94% ROC-AUC, capable of accurately stratifying patient risk levels.
+- **Multi-Model Disease Prediction:** Beyond mortality risk, the system predicts specific diseases:
+  - Heart Disease (81% accuracy, 93% ROC-AUC)
+  - Diabetes (77% accuracy, 83% ROC-AUC)
+  - Stroke (75% accuracy, 84% ROC-AUC)
+- **Clinical Indicators:** Rule-based detection of sepsis, respiratory distress, cardiovascular issues, and organ dysfunction
+- **Privacy-Preserving (Local-First):** All processing happens on-device. No patient data is sent to external APIs. All 4 ML models run locally with <50ms total inference time.
+- **High-Performance ML Model:** Main mortality risk model trained on 4,290 patients with 87% accuracy and 94% ROC-AUC
 
 ## Setup Instructions
 
@@ -27,6 +32,11 @@ pip install -r backend/requirements.txt
 # Run the training script (if you need to retrain the model)
 # Note: The provided pre-trained model artifacts are already in backend/app/models/
 python backend/train_model.py
+
+# Train disease-specific models (Heart, Diabetes, Stroke)
+# Note: Requires datasets in /datasets/disease prediction/ folder
+# Pre-trained models are already included
+python backend/train_disease_models.py
 
 # Start the FastAPI server
 uvicorn backend.app.main:app --reload --port 8000
@@ -95,11 +105,18 @@ No manual clinical scoring rubrics (like MEWS/NEWS) were hardcoded because the c
 
 ## Evaluation Metrics
 
-**Model Performance (5-Fold Cross-Validation on 4,290 patients):**
+**Main Mortality Risk Model (5-Fold Cross-Validation on 4,290 patients):**
 - **Accuracy:** 87%
 - **ROC-AUC (weighted):** 94.2%
 - **High-Risk Recall:** 58.4% (critical metric for patient safety)
 - **Low-Risk Precision:** 90% (minimizes false alarms)
 - **Medium-Risk Recall:** 95%
+
+**Disease-Specific Prediction Models:**
+- **Heart Disease Model:** 81% accuracy, 93% ROC-AUC (trained on 1,025 patients)
+- **Diabetes Model:** 77% accuracy, 83% ROC-AUC (trained on 768 patients)
+- **Stroke Model:** 75% accuracy, 84% ROC-AUC (trained on 5,110 patients)
+
+All models run locally with combined inference time <50ms.
 
 For full details on feature importances and fold-by-fold results, see `backend/reports/model_metrics.md`.
