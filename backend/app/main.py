@@ -1086,6 +1086,11 @@ def build_jarvis_realtime_session_config(risk_context: dict | None = None) -> di
         "type": "realtime",
         "model": JARVIS_REALTIME_MODEL,
         "instructions": build_jarvis_system_prompt(risk_context),
+        "audio": {
+            "output": {
+                "voice": JARVIS_REALTIME_VOICE
+            }
+        }
     }
 
 
@@ -1148,7 +1153,7 @@ async def jarvis_realtime_session(request: Request):
 
             # Step 2: Use ephemeral token to exchange SDP
             sdp_response = await client.post(
-                f"https://api.openai.com/v1/realtime?model={JARVIS_REALTIME_MODEL}",
+                "https://api.openai.com/v1/realtime/calls",
                 headers={
                     "Authorization": f"Bearer {ephemeral_token}",
                     "Content-Type": "application/sdp",
