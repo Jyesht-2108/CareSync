@@ -808,15 +808,12 @@ async def evaluate_risk(req: RiskAssessmentRequest):
     )
     
     # ═══ 5. INTELLIGENT RISK AGGREGATION ═══
-    # Priority order:
-    # 1. Critical safety overrides (can't miss these!)
-    # 2. NEWS2 vital score (evidence-based clinical tool)
-    # 3. Disease-specific models (domain-specific)
-    # 4. ML model (but text-biased, so lowest priority)
+    # Uses weighted scoring with vitals-aware sanity checks.
+    # Prevents false High risk for healthy patients with normal vitals.
     
     v = req.vitals
     
-    # CRITICAL SAFETY OVERRIDES (immediate High risk)
+    # CRITICAL SAFETY OVERRIDES (immediate High risk) — non-negotiable
     if (
         v.spo2 < 88 or              # Severe hypoxia
         v.heart_rate > 150 or       # Severe tachycardia
@@ -830,32 +827,65 @@ async def evaluate_risk(req: RiskAssessmentRequest):
         final_risk_score = 0.95
         primary_reason = "CRITICAL: Vital signs in dangerous range"
     
-    # Disease model shows High risk (>70%) even with normal vitals
-    elif disease_risk_level == "High" and news2_risk_level == "Low":
-        final_risk_level = "High"
-        final_risk_score = max(0.7, max_disease_risk)
-        primary_reason = f"High disease risk detected (vitals currently stable)"
-    
-    # NEWS2 or disease model shows High risk
-    elif news2_risk_level == "High" or disease_risk_level == "High" or critical_condition:
-        final_risk_level = "High"
-        final_risk_score = max(0.7, ml_risk_score, max_disease_risk, news2_score / 20.0)
-        primary_reason = f"NEWS2: {news2_risk_level}, Disease: {disease_risk_level}"
-    
-    # Medium risk from any source
-    elif (news2_risk_level == "Medium" or 
-          disease_risk_level == "Medium" or 
-          ml_risk_level == "Medium" or
-          proba[2] > 0.35):  # ML shows elevated High risk probability
-        final_risk_level = "Medium"
-        final_risk_score = max(0.4, ml_risk_score, max_disease_risk * 0.8, news2_score / 20.0)
-        primary_reason = f"NEWS2: {news2_risk_level}, Disease: {disease_risk_level}, ML: {ml_risk_level}"
-    
-    # Low risk only if ALL indicators agree
     else:
-        final_risk_level = "Low"
-        final_risk_score = min(0.3, max(ml_risk_score, max_disease_risk, news2_score / 20.0))
-        primary_reason = "All indicators within normal limits"
+        # ── Weighted Risk Scoring ──
+        # NEWS2 (vital-based, evidence-backed):  40% weight
+        # Disease models (average risk):         35% weight
+        # ML mortality model:                    25% weight
+        
+        news2_normalized = min(news2_score / 12.0, 1.0)  # NEWS2 max ~12
+        
+        avg_disease_risk = (sum(disease_risks) / len(disease_risks)) if disease_risks else 0.0
+        
+        weighted_score = (
+            news2_normalized * 0.40 +
+            avg_disease_risk * 0.35 +
+            ml_risk_score * 0.25
+        )
+        
+        # ── Count how many disease models flag elevated risk ──
+        elevated_disease_count = sum(1 for r in disease_risks if r > 0.6)
+        high_disease_count = sum(1 for r in disease_risks if r > 0.8)
+        
+        # ── Vitals sanity check ──
+        # If ALL vitals are perfectly normal (NEWS2 raw = 0), the patient 
+        # is currently stable. Don't let noisy ML models push to High alone.
+        vitals_all_normal = (news2_result['score'] == 0)  # Raw score, before age adjustment
+        
+        # ── Determine final risk level ──
+        if critical_condition:
+            # Critical clinical condition detected (sepsis, resp distress, etc.)
+            final_risk_level = "High"
+            final_risk_score = max(0.70, weighted_score)
+            primary_reason = "Critical clinical condition detected"
+        
+        elif weighted_score > 0.65 and not vitals_all_normal:
+            # High weighted score WITH abnormal vitals
+            final_risk_level = "High"
+            final_risk_score = weighted_score
+            primary_reason = f"NEWS2: {news2_risk_level}, Disease: {disease_risk_level}, ML: {ml_risk_level}"
+        
+        elif weighted_score > 0.65 and vitals_all_normal:
+            # High weighted score but vitals are fine → cap at Medium
+            # Unless multiple disease models strongly agree (>80%)
+            if high_disease_count >= 2:
+                final_risk_level = "High"
+                final_risk_score = weighted_score
+                primary_reason = f"Multiple disease models flag high risk despite stable vitals"
+            else:
+                final_risk_level = "Medium"
+                final_risk_score = min(weighted_score, 0.60)
+                primary_reason = f"Elevated disease risk, vitals currently stable — monitor closely"
+        
+        elif weighted_score > 0.35:
+            final_risk_level = "Medium"
+            final_risk_score = weighted_score
+            primary_reason = f"NEWS2: {news2_risk_level}, Disease: {disease_risk_level}, ML: {ml_risk_level}"
+        
+        else:
+            final_risk_level = "Low"
+            final_risk_score = weighted_score
+            primary_reason = "All indicators within normal limits"
     
     # ═══ 6. Contributing Factors (Enhanced) ═══
     contributing_factors = []
@@ -1069,6 +1099,13 @@ When discussing risk levels:
 - HIGH risk → Be clear and direct about needing immediate attention, cite specific concerns
 - MEDIUM risk → Suggest seeing a doctor within a day, mention what to watch
 - LOW risk → Reassure but note routine monitoring
+
+CRITICAL CONVERSATION RULES:
+1. NEVER speak continuously or go on long monologues. 
+2. Keep EVERY response extremely brief (1-3 sentences maximum).
+3. Always pause and wait for the user to respond or ask follow-up questions.
+4. Actively listen—if the user interrupts you, stop talking immediately.
+5. Start the conversation with a very brief, friendly 1-sentence greeting acknowledging the patient context, then wait for the user.
 
 Current patient context:"""
 

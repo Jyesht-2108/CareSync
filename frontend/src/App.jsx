@@ -31,10 +31,10 @@ function VitalsChart({ label, value, unit, min, max, color }) {
   const generateSparkline = () => {
     const points = 24
     const data = []
-    const variance = (normalMax - normalMin) * 0.1
+    const range = normalMax - normalMin
+    const variance = range > 0 ? range * 0.1 : 1
     
     for (let i = 0; i < points; i++) {
-      const trend = (value - normalMin) / (normalMax - normalMin)
       const noise = (Math.random() - 0.5) * variance
       const point = value + noise
       data.push(Math.max(normalMin, Math.min(normalMax, point)))
@@ -46,14 +46,16 @@ function VitalsChart({ label, value, unit, min, max, color }) {
   }
 
   const sparklineData = generateSparkline()
+  const range = normalMax - normalMin
   const sparklinePoints = sparklineData.map((val, idx) => {
     const x = (idx / (sparklineData.length - 1)) * 100
-    const y = 100 - ((val - normalMin) / (normalMax - normalMin)) * 100
-    return `${x},${y}`
+    const yRaw = range > 0 ? ((val - normalMin) / range) * 100 : 50
+    const y = 100 - Math.max(0, Math.min(100, isFinite(yRaw) ? yRaw : 50))
+    return `${x.toFixed(2)},${y.toFixed(2)}`
   }).join(' ')
 
   return (
-    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/50 hover:border-slate-600/50 transition-all duration-300 group">
+    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/50 hover:border-slate-600/50 transition-all duration-300 group">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{label}</span>
         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full transition-all duration-300 ${isAbnormal ? 'bg-amber-500/20 text-amber-400 animate-pulse' : 'bg-emerald-500/20 text-emerald-400'}`}>
@@ -66,7 +68,7 @@ function VitalsChart({ label, value, unit, min, max, color }) {
       </div>
       
       {/* Sparkline trend */}
-      <div className="mb-3 h-10 relative">
+      <div className="mb-3 h-12 relative">
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full opacity-60 group-hover:opacity-100 transition-opacity duration-300">
           <polyline
             points={sparklinePoints}
@@ -78,11 +80,11 @@ function VitalsChart({ label, value, unit, min, max, color }) {
           />
           <polyline
             points={sparklinePoints}
-            fill={isAbnormal ? 'url(#gradient-warn)' : `url(#gradient-${label})`}
+            fill={isAbnormal ? 'url(#gradient-warn)' : `url(#gradient-${label.replace(/[^a-zA-Z0-9]/g, '')})`}
             opacity="0.2"
           />
           <defs>
-            <linearGradient id={`gradient-${label}`} x1="0" x2="0" y1="0" y2="1">
+            <linearGradient id={`gradient-${label.replace(/[^a-zA-Z0-9]/g, '')}`} x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stopColor={color} stopOpacity="0.5"/>
               <stop offset="100%" stopColor={color} stopOpacity="0"/>
             </linearGradient>
@@ -214,8 +216,6 @@ function LoadingAnalysis({ progress }) {
             {stages.map((stage, index) => {
               const isComplete = index < currentStageIndex
               const isCurrent = index === currentStageIndex
-              const isPending = index > currentStageIndex
-
               return (
                 <div
                   key={index}
@@ -259,75 +259,67 @@ function LoadingAnalysis({ progress }) {
   )
 }
 
-/* ─── Emergency / High-Risk View ──────────────────────────────────── */
-function EmergencyView({ result, onReset }) {
+/* ─── Section Header Component ────────────────────────────────────── */
+function SectionHeader({ icon, title, subtitle, badge }) {
   return (
-    <div className="min-h-screen bg-red-950 flex flex-col items-center justify-center px-4 animate-pulse-slow">
-      {/* Flashing danger header */}
-      <div className="w-full max-w-lg mx-auto text-center">
-        <div className="mb-6 flex justify-center">
-          <div className="w-20 h-20 rounded-full bg-red-600 flex items-center justify-center animate-ping-slow shadow-2xl shadow-red-600/50">
-            <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-          </div>
+    <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600/20 to-blue-600/20 flex items-center justify-center text-xl border border-violet-500/20">
+          {icon}
         </div>
-
-        <h1 className="text-5xl sm:text-6xl font-black text-white tracking-wider mb-4" style={{ letterSpacing: '0.15em' }}>
-          ⚠ HIGH RISK
-        </h1>
-        <p className="text-2xl sm:text-3xl font-bold text-red-200 mb-2 tracking-wide">
-          PATIENT NEEDS IMMEDIATE CARE
-        </p>
-        <p className="text-xl text-red-300/80 mb-8">
-          Risk Score: {(result.risk_score * 100).toFixed(0)}%
-        </p>
-
-        {/* Contributing factors — simplified */}
-        <div className="bg-red-900/60 rounded-2xl p-4 mb-8 border border-red-700/50">
-          <p className="text-lg font-bold text-red-200 mb-3 tracking-wide">KEY CONCERNS:</p>
-          {result.contributing_factors.map((f, i) => (
-            <p key={i} className="text-xl font-semibold text-white mb-1 tracking-wide">
-              • {f.factor}
-            </p>
-          ))}
+        <div>
+          <h3 className="text-base font-bold text-white">{title}</h3>
+          {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
         </div>
-
-        {/* CALL AMBULANCE — dominant action */}
-        <a
-          href="tel:108"
-          id="call-ambulance-btn"
-          className="block w-full bg-red-600 hover:bg-red-500 active:bg-red-400 text-white text-3xl sm:text-4xl font-black py-6 px-8 rounded-2xl shadow-2xl shadow-red-600/40 transition-all duration-200 tracking-widest border-4 border-red-400 mb-4"
-          style={{ letterSpacing: '0.2em' }}
-        >
-          📞 CALL AMBULANCE
-        </a>
-        <p className="text-sm text-red-400 mb-6">Dial 108 (India Emergency)</p>
-
-        <button
-          onClick={onReset}
-          id="emergency-back-btn"
-          className="text-red-400 hover:text-red-300 text-sm underline transition-colors"
-        >
-          ← Back to assessment
-        </button>
       </div>
+      {badge && (
+        <span className="px-3 py-1 bg-indigo-500/20 rounded-full text-xs font-bold text-indigo-400 border border-indigo-500/20">
+          {badge}
+        </span>
+      )}
+    </div>
+  )
+}
 
-      <PrivacyBadge />
+/* ─── Disease Pie Chart Component ─────────────────────────────────── */
+function DiseasePie({ title, icon, probability }) {
+  const riskColor = probability > 0.7 ? '#ef4444' : probability > 0.4 ? '#f59e0b' : '#10b981'
+  const riskLabel = probability > 0.7 ? 'High Risk' : probability > 0.4 ? 'Moderate Risk' : 'Low Risk'
+  const riskTextColor = probability > 0.7 ? 'text-red-400' : probability > 0.4 ? 'text-amber-400' : 'text-emerald-400'
 
-      <style>{`
-        @keyframes ping-slow {
-          0% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.15); opacity: 0.8; }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        @keyframes pulse-slow {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.95; }
-        }
-        .animate-ping-slow { animation: ping-slow 2s ease-in-out infinite; }
-        .animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
-      `}</style>
+  return (
+    <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/40 flex flex-col items-center">
+      <h4 className="text-sm font-semibold text-slate-300 mb-1 flex items-center gap-2">
+        {icon} {title}
+      </h4>
+      <div className="w-full h-48">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={[
+                { name: 'Risk', value: probability * 100 },
+                { name: 'Safe', value: (1 - probability) * 100 }
+              ]}
+              cx="50%"
+              cy="50%"
+              innerRadius={40}
+              outerRadius={70}
+              paddingAngle={2}
+              dataKey="value"
+            >
+              <Cell fill={riskColor} />
+              <Cell fill="#334155" />
+            </Pie>
+            <Tooltip formatter={(value) => `${value.toFixed(1)}%`} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="text-center text-2xl font-bold text-white -mt-2">
+        {(probability * 100).toFixed(1)}%
+      </p>
+      <p className={`text-center text-xs font-medium mt-1 ${riskTextColor}`}>
+        {riskLabel}
+      </p>
     </div>
   )
 }
@@ -336,14 +328,13 @@ function EmergencyView({ result, onReset }) {
 function ResultsView({ result, formData, onReset }) {
   const isLow = result.risk_level === 'Low'
   const isHigh = result.risk_level === 'High'
-  const riskColor = isLow ? 'emerald' : isHigh ? 'red' : 'amber'
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 pb-24">
       {/* Emergency Banner for High Risk */}
       {isHigh && (
         <div className="bg-red-900 border-b-4 border-red-600">
-          <div className="max-w-lg mx-auto px-4 py-4">
+          <div className="max-w-7xl mx-auto px-6 py-4">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center animate-pulse">
                 <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -354,502 +345,372 @@ function ResultsView({ result, formData, onReset }) {
                 <h2 className="text-xl font-black text-white tracking-wider">⚠️ HIGH RISK ALERT</h2>
                 <p className="text-sm text-red-200">Patient needs immediate clinical evaluation</p>
               </div>
+              <a
+                href="tel:108"
+                className="bg-red-600 hover:bg-red-500 text-white text-lg font-bold py-3 px-8 rounded-xl shadow-lg text-center transition-all duration-200"
+              >
+                📞 CALL 108
+              </a>
             </div>
-            <a
-              href="tel:108"
-              className="block w-full bg-red-600 hover:bg-red-500 text-white text-lg font-bold py-3 px-6 rounded-xl shadow-lg text-center transition-all duration-200"
-            >
-              📞 CALL AMBULANCE (108)
-            </a>
-            <p className="text-xs text-red-300 text-center mt-2">Emergency medical services</p>
           </div>
         </div>
       )}
       
       {/* Header */}
       <header className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-xl border-b border-slate-800/50">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
-          <button onClick={onReset} className="text-slate-400 hover:text-white transition-colors" id="back-btn">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={onReset} className="text-slate-400 hover:text-white transition-colors" id="back-btn">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center">
+                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-white tracking-wide">CareSync</h1>
+                <p className="text-[11px] text-slate-500">Assessment Results</p>
+              </div>
+            </div>
+          </div>
+          <button onClick={onReset} className="text-sm text-slate-400 hover:text-white bg-slate-800/60 px-4 py-2 rounded-lg border border-slate-700/50 transition-colors">
+            ← New Assessment
           </button>
-          <h1 className="text-lg font-bold text-white tracking-wide">Assessment Results</h1>
-          <div className="w-6" />
         </div>
       </header>
 
-      <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
-        {/* Risk Score Card with Gauge */}
-        <div className={`bg-gradient-to-br rounded-3xl p-6 border shadow-xl`}
-          style={{
-            background: isLow
-              ? 'linear-gradient(135deg, rgba(6,78,59,0.4), rgba(6,78,59,0.15))'
-              : isHigh
-              ? 'linear-gradient(135deg, rgba(127,29,29,0.4), rgba(127,29,29,0.15))'
-              : 'linear-gradient(135deg, rgba(120,53,15,0.4), rgba(120,53,15,0.15))',
-            borderColor: isLow ? 'rgba(16,185,129,0.3)' : isHigh ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.3)',
-          }}>
-          <div className="text-center">
-            <p className="text-sm font-medium text-slate-400 uppercase tracking-widest mb-4">Risk Level</p>
-            
-            {/* Circular Risk Gauge */}
-            <div className="relative w-40 h-40 mx-auto mb-4">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                {/* Background circle */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="40"
-                  fill="none"
-                  stroke="rgba(100,116,139,0.2)"
-                  strokeWidth="8"
-                />
-                {/* Progress circle */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="40"
-                  fill="none"
-                  stroke={isLow ? '#10b981' : isHigh ? '#ef4444' : '#f59e0b'}
-                  strokeWidth="8"
-                  strokeLinecap="round"
-                  strokeDasharray={`${result.risk_score * 251.2} 251.2`}
-                  className="transition-all duration-1000 ease-out"
-                  style={{
-                    filter: `drop-shadow(0 0 8px ${isLow ? '#10b98140' : isHigh ? '#ef444440' : '#f59e0b40'})`
-                  }}
-                />
-              </svg>
-              {/* Center text */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-4xl font-black text-white mb-1">
-                  {(result.risk_score * 100).toFixed(0)}%
+      <div className="max-w-7xl mx-auto px-6 pt-8">
+        {/* ─── Top Row: Risk Score + Patient Info + Contributing Factors ─── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Risk Score Card with Gauge */}
+          <div className={`bg-gradient-to-br rounded-3xl p-6 border shadow-xl`}
+            style={{
+              background: isLow
+                ? 'linear-gradient(135deg, rgba(6,78,59,0.4), rgba(6,78,59,0.15))'
+                : isHigh
+                ? 'linear-gradient(135deg, rgba(127,29,29,0.4), rgba(127,29,29,0.15))'
+                : 'linear-gradient(135deg, rgba(120,53,15,0.4), rgba(120,53,15,0.15))',
+              borderColor: isLow ? 'rgba(16,185,129,0.3)' : isHigh ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.3)',
+            }}>
+            <div className="text-center">
+              <p className="text-sm font-medium text-slate-400 uppercase tracking-widest mb-4">Risk Level</p>
+              
+              {/* Circular Risk Gauge */}
+              <div className="relative w-44 h-44 mx-auto mb-4">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(100,116,139,0.2)" strokeWidth="8" />
+                  <circle
+                    cx="50" cy="50" r="40" fill="none"
+                    stroke={isLow ? '#10b981' : isHigh ? '#ef4444' : '#f59e0b'}
+                    strokeWidth="8" strokeLinecap="round"
+                    strokeDasharray={`${result.risk_score * 251.2} 251.2`}
+                    className="transition-all duration-1000 ease-out"
+                    style={{ filter: `drop-shadow(0 0 8px ${isLow ? '#10b98140' : isHigh ? '#ef444440' : '#f59e0b40'})` }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <div className="text-4xl font-black text-white mb-1">
+                    {(result.risk_score * 100).toFixed(0)}%
+                  </div>
+                  <div className="text-xs text-slate-400">Risk Score</div>
                 </div>
-                <div className="text-xs text-slate-400">Risk Score</div>
               </div>
+              
+              <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-lg font-bold mb-2`}
+                style={{
+                  backgroundColor: isLow ? 'rgba(16,185,129,0.2)' : isHigh ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)',
+                  color: isLow ? '#6ee7b7' : isHigh ? '#fca5a5' : '#fcd34d',
+                }}>
+                <span className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: isLow ? '#10b981' : isHigh ? '#ef4444' : '#f59e0b' }} />
+                {result.risk_level}
+              </div>
+              <p className="text-sm text-slate-400">Confidence: {(result.confidence * 100).toFixed(0)}%</p>
             </div>
-            
-            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-lg font-bold mb-2`}
-              style={{
-                backgroundColor: isLow ? 'rgba(16,185,129,0.2)' : isHigh ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)',
-                color: isLow ? '#6ee7b7' : isHigh ? '#fca5a5' : '#fcd34d',
-              }}>
-              <span className="w-3 h-3 rounded-full animate-pulse" style={{ backgroundColor: isLow ? '#10b981' : isHigh ? '#ef4444' : '#f59e0b' }} />
-              {result.risk_level}
+          </div>
+
+          {/* Patient Info Card */}
+          <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/40">
+            <SectionHeader icon="👤" title="Patient Profile" />
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              {[
+                { label: 'Age', value: formData.age, icon: '🎂' },
+                { label: 'Gender', value: formData.gender, icon: '⚧' },
+                { label: 'Smoking', value: formData.smoking_status, icon: '🚬' },
+                { label: 'Diabetes', value: formData.diabetes, icon: '💉' },
+                { label: 'Hypertension', value: formData.hypertension, icon: '💊' },
+                { label: 'Diastolic BP', value: `${formData.diastolic_bp} mmHg`, icon: '🩸' },
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-2 p-2.5 bg-slate-900/30 rounded-xl">
+                  <span className="text-lg">{item.icon}</span>
+                  <div>
+                    <p className="text-[11px] text-slate-500 uppercase tracking-wider">{item.label}</p>
+                    <p className="text-white font-medium">{item.value}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-            <p className="text-sm text-slate-400">Confidence: {(result.confidence * 100).toFixed(0)}%</p>
+          </div>
+
+          {/* Contributing Factors */}
+          <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/40">
+            <SectionHeader icon="📋" title="Contributing Factors" />
+            <div className="space-y-3">
+              {result.contributing_factors.map((f, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold"
+                    style={{
+                      backgroundColor: i === 0 ? 'rgba(139,92,246,0.2)' : i === 1 ? 'rgba(59,130,246,0.2)' : 'rgba(107,114,128,0.2)',
+                      color: i === 0 ? '#c4b5fd' : i === 1 ? '#93c5fd' : '#9ca3af',
+                    }}>
+                    {i + 1}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-white">{f.factor}</p>
+                    <div className="mt-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-1000"
+                        style={{
+                          width: `${Math.min(100, f.importance * 500)}%`,
+                          background: i === 0 ? 'linear-gradient(90deg, #8b5cf6, #a78bfa)' : i === 1 ? 'linear-gradient(90deg, #3b82f6, #60a5fa)' : 'linear-gradient(90deg, #6b7280, #9ca3af)',
+                        }} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Contributing Factors */}
-        <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/40">
-          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">Contributing Factors</h3>
-          <div className="space-y-3">
-            {result.contributing_factors.map((f, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold"
-                  style={{
-                    backgroundColor: i === 0 ? 'rgba(139,92,246,0.2)' : i === 1 ? 'rgba(59,130,246,0.2)' : 'rgba(107,114,128,0.2)',
-                    color: i === 0 ? '#c4b5fd' : i === 1 ? '#93c5fd' : '#9ca3af',
-                  }}>
-                  {i + 1}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-white">{f.factor}</p>
-                  <div className="mt-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all duration-1000"
-                      style={{
-                        width: `${Math.min(100, f.importance * 500)}%`,
-                        background: i === 0 ? 'linear-gradient(90deg, #8b5cf6, #a78bfa)' : i === 1 ? 'linear-gradient(90deg, #3b82f6, #60a5fa)' : 'linear-gradient(90deg, #6b7280, #9ca3af)',
-                      }} />
+        {/* ─── NEWS2 + Clinical Conditions Row ─── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* NEWS2 Score */}
+          {result.clinical_conditions?.news2_score !== undefined && (
+            <div className="bg-gradient-to-br from-blue-900/40 to-cyan-900/40 backdrop-blur-sm rounded-2xl p-6 border border-blue-700/40">
+              <SectionHeader icon="📊" title="NEWS2 Vital Assessment" subtitle="National Early Warning Score 2 — Evidence-based vital signs scoring" />
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black"
+                    style={{
+                      backgroundColor: result.clinical_conditions.news2_risk === 'High' ? 'rgba(239,68,68,0.2)' : 
+                                     result.clinical_conditions.news2_risk === 'Medium' ? 'rgba(245,158,11,0.2)' : 
+                                     'rgba(16,185,129,0.2)',
+                      color: result.clinical_conditions.news2_risk === 'High' ? '#ef4444' : 
+                            result.clinical_conditions.news2_risk === 'Medium' ? '#f59e0b' : 
+                            '#10b981',
+                    }}>
+                    {result.clinical_conditions.news2_score}
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-white">{result.clinical_conditions.news2_risk} Risk</p>
+                    <p className="text-xs text-slate-400">
+                      {result.clinical_conditions.news2_score <= 4 ? 'Current vitals stable' : 
+                       result.clinical_conditions.news2_score <= 6 ? 'Urgent clinical response needed' : 
+                       'Emergency assessment required'}
+                    </p>
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* NEWS2 Score */}
-        {result.clinical_conditions?.news2_score !== undefined && (
-          <div className="bg-gradient-to-br from-blue-900/40 to-cyan-900/40 backdrop-blur-sm rounded-2xl p-5 border border-blue-700/40">
-            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-3">
-              📊 NEWS2 Vital Assessment
-            </h3>
-            <p className="text-xs text-slate-400 mb-4">
-              National Early Warning Score 2 - Evidence-based vital signs scoring system
-            </p>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-3">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black"
-                  style={{
-                    backgroundColor: result.clinical_conditions.news2_risk === 'High' ? 'rgba(239,68,68,0.2)' : 
-                                   result.clinical_conditions.news2_risk === 'Medium' ? 'rgba(245,158,11,0.2)' : 
-                                   'rgba(16,185,129,0.2)',
-                    color: result.clinical_conditions.news2_risk === 'High' ? '#ef4444' : 
-                          result.clinical_conditions.news2_risk === 'Medium' ? '#f59e0b' : 
-                          '#10b981',
-                  }}>
-                  {result.clinical_conditions.news2_score}
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-white">{result.clinical_conditions.news2_risk} Risk</p>
-                  <p className="text-xs text-slate-400">
-                    {result.clinical_conditions.news2_score <= 4 ? 'Current vitals stable' : 
-                     result.clinical_conditions.news2_score <= 6 ? 'Urgent clinical response needed' : 
-                     'Emergency assessment required'}
+              {result.clinical_conditions.primary_assessment && (
+                <div className="mt-3 p-3 bg-slate-900/40 rounded-xl">
+                  <p className="text-xs text-slate-300">
+                    <span className="font-semibold text-blue-400">Assessment: </span>
+                    {result.clinical_conditions.primary_assessment}
                   </p>
                 </div>
-              </div>
-            </div>
-            {result.clinical_conditions.primary_assessment && (
-              <div className="mt-3 p-3 bg-slate-900/40 rounded-xl">
-                <p className="text-xs text-slate-300">
-                  <span className="font-semibold text-blue-400">Assessment: </span>
-                  {result.clinical_conditions.primary_assessment}
-                </p>
-              </div>
-            )}
-            
-            {/* Explanation when NEWS2 is Low but overall risk is High */}
-            {result.clinical_conditions.news2_risk === 'Low' && result.risk_level === 'High' && (
-              <div className="mt-3 p-3 bg-amber-900/20 border border-amber-700/30 rounded-xl">
-                <p className="text-xs text-amber-300">
-                  <span className="font-semibold">⚠️ Note:</span> While current vitals are stable (NEWS2: Low), 
-                  the overall HIGH risk is driven by disease-specific indicators and chronic risk factors. 
-                  This suggests long-term cardiovascular risk rather than acute distress.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Clinical Conditions */}
-        {result.clinical_conditions && (
-          <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/40">
-            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
-              🩺 Clinical Indicators
-            </h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-slate-900/30 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🦠</span>
-                  <span className="text-sm text-slate-300">Sepsis/Infection</span>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  result.clinical_conditions.sepsis_risk === 'High' ? 'bg-red-500/20 text-red-400' :
-                  result.clinical_conditions.sepsis_risk === 'Moderate' ? 'bg-amber-500/20 text-amber-400' :
-                  'bg-emerald-500/20 text-emerald-400'
-                }`}>
-                  {result.clinical_conditions.sepsis_risk}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-slate-900/30 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🫁</span>
-                  <span className="text-sm text-slate-300">Respiratory Function</span>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  result.clinical_conditions.respiratory_concern ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'
-                }`}>
-                  {result.clinical_conditions.respiratory_concern ? 'Impaired' : 'Normal'}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-slate-900/30 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">❤️</span>
-                  <span className="text-sm text-slate-300">Cardiovascular</span>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  result.clinical_conditions.cardiovascular_risk === 'Elevated' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'
-                }`}>
-                  {result.clinical_conditions.cardiovascular_risk}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-slate-900/30 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🫀</span>
-                  <span className="text-sm text-slate-300">Organ Function</span>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  result.clinical_conditions.organ_function?.includes('Severe') ? 'bg-red-500/20 text-red-400' :
-                  result.clinical_conditions.organ_function?.includes('Moderate') ? 'bg-amber-500/20 text-amber-400' :
-                  'bg-emerald-500/20 text-emerald-400'
-                }`}>
-                  {result.clinical_conditions.organ_function}
-                </span>
-              </div>
-
-              {result.clinical_conditions.requires_icu && (
-                <div className="mt-4 p-4 bg-red-900/20 border border-red-700/30 rounded-xl">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">🏥</span>
-                    <span className="text-sm font-bold text-red-400">ICU Care Recommended</span>
-                  </div>
-                  <p className="text-xs text-red-300 mt-2">
-                    Multiple severe indicators detected - intensive care may be required
+              )}
+              
+              {result.clinical_conditions.news2_risk === 'Low' && result.risk_level === 'High' && (
+                <div className="mt-3 p-3 bg-amber-900/20 border border-amber-700/30 rounded-xl">
+                  <p className="text-xs text-amber-300">
+                    <span className="font-semibold">⚠️ Note:</span> While current vitals are stable (NEWS2: Low), 
+                    the overall HIGH risk is driven by disease-specific indicators and chronic risk factors. 
+                    This suggests long-term cardiovascular risk rather than acute distress.
                   </p>
                 </div>
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Disease Risk Predictions with Beautiful Visualizations */}
+          {/* Clinical Conditions */}
+          {result.clinical_conditions && (
+            <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/40">
+              <SectionHeader icon="🩺" title="Clinical Indicators" subtitle="Triage-level condition detection" />
+              <div className="space-y-3">
+                {[
+                  { icon: '🦠', label: 'Sepsis/Infection', value: result.clinical_conditions.sepsis_risk, type: 'level' },
+                  { icon: '🫁', label: 'Respiratory Function', value: result.clinical_conditions.respiratory_concern, type: 'bool' },
+                  { icon: '❤️', label: 'Cardiovascular', value: result.clinical_conditions.cardiovascular_risk, type: 'level' },
+                  { icon: '🫀', label: 'Organ Function', value: result.clinical_conditions.organ_function, type: 'severity' },
+                ].map((item, i) => {
+                  let badgeClass = 'bg-emerald-500/20 text-emerald-400'
+                  let displayValue = item.value
+
+                  if (item.type === 'level') {
+                    if (item.value === 'High' || item.value === 'Elevated') badgeClass = 'bg-red-500/20 text-red-400'
+                    else if (item.value === 'Moderate') badgeClass = 'bg-amber-500/20 text-amber-400'
+                  } else if (item.type === 'bool') {
+                    displayValue = item.value ? 'Impaired' : 'Normal'
+                    if (item.value) badgeClass = 'bg-red-500/20 text-red-400'
+                  } else if (item.type === 'severity') {
+                    if (item.value?.includes('Severe')) badgeClass = 'bg-red-500/20 text-red-400'
+                    else if (item.value?.includes('Moderate')) badgeClass = 'bg-amber-500/20 text-amber-400'
+                  }
+
+                  return (
+                    <div key={i} className="flex items-center justify-between p-3 bg-slate-900/30 rounded-xl">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{item.icon}</span>
+                        <span className="text-sm text-slate-300">{item.label}</span>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${badgeClass}`}>
+                        {displayValue}
+                      </span>
+                    </div>
+                  )
+                })}
+
+                {result.clinical_conditions.requires_icu && (
+                  <div className="mt-4 p-4 bg-red-900/20 border border-red-700/30 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">🏥</span>
+                      <span className="text-sm font-bold text-red-400">ICU Care Recommended</span>
+                    </div>
+                    <p className="text-xs text-red-300 mt-2">
+                      Multiple severe indicators detected - intensive care may be required
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ─── Current Vitals (Full Width 4-Col Grid) ─── */}
+        <div className="mb-8">
+          <SectionHeader icon="💓" title="Current Vitals" subtitle="Real-time patient vital signs with 24h trend" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <VitalsChart label="Heart Rate" value={parseFloat(formData.heart_rate)} unit="BPM" min={60} max={100} color="#ef4444" />
+            <VitalsChart label="SpO₂" value={parseFloat(formData.spo2)} unit="%" min={95} max={100} color="#3b82f6" />
+            <VitalsChart label="Systolic BP" value={parseFloat(formData.systolic_bp)} unit="mmHg" min={90} max={140} color="#8b5cf6" />
+            <VitalsChart label="Temp" value={parseFloat(formData.temperature)} unit="°C" min={36.1} max={37.5} color="#f59e0b" />
+          </div>
+        </div>
+
+        {/* ─── Disease Risk Predictions ─── */}
         {result.disease_predictions && (
           <>
-            {/* Disease Risk Assessment Header */}
-            <div className="bg-gradient-to-br from-violet-900/40 to-blue-900/40 backdrop-blur-sm rounded-2xl p-5 border border-violet-700/40">
-              <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
-                🔬 Disease Risk Assessment
-                <span className="text-xs font-normal text-slate-400">AI-Powered Analysis</span>
-              </h3>
-              <p className="text-sm text-slate-300">
-                Comprehensive disease risk predictions from ML models trained on clinical datasets
-              </p>
-            </div>
-
-            {/* Radar Chart - Overall Risk Profile */}
-            <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/40">
-              <h4 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
-                📊 Multi-Disease Risk Profile
-              </h4>
-              <div className="w-full h-80 flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart data={[
-                    {
-                      disease: 'Heart',
-                      risk: (result.disease_predictions.heart_disease * 100).toFixed(1),
-                      fullMark: 100,
-                    },
-                    {
-                      disease: 'Diabetes',
-                      risk: (result.disease_predictions.diabetes * 100).toFixed(1),
-                      fullMark: 100,
-                    },
-                    {
-                      disease: 'Stroke',
-                      risk: (result.disease_predictions.stroke * 100).toFixed(1),
-                      fullMark: 100,
-                    },
-                    {
-                      disease: 'Overall',
-                      risk: (result.risk_score * 100).toFixed(1),
-                      fullMark: 100,
-                    },
-                  ]}>
-                    <PolarGrid stroke="#475569" />
-                    <PolarAngleAxis dataKey="disease" tick={{ fill: '#cbd5e1', fontSize: 12 }} />
-                    <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 10 }} />
-                    <Radar name="Risk %" dataKey="risk" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }}
-                      labelStyle={{ color: '#e2e8f0' }}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Bar Chart - Disease Comparison */}
-            <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/40">
-              <h4 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
-                📈 Risk Comparison
-              </h4>
-              <div className="w-full h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={[
-                    {
-                      name: 'Heart Disease',
-                      risk: result.disease_predictions.heart_disease * 100,
-                      threshold: 70,
-                    },
-                    {
-                      name: 'Diabetes',
-                      risk: result.disease_predictions.diabetes * 100,
-                      threshold: 70,
-                    },
-                    {
-                      name: 'Stroke',
-                      risk: result.disease_predictions.stroke * 100,
-                      threshold: 70,
-                    },
-                  ]}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                    <XAxis dataKey="name" tick={{ fill: '#cbd5e1', fontSize: 11 }} />
-                    <YAxis tick={{ fill: '#cbd5e1', fontSize: 11 }} domain={[0, 100]} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }}
-                      labelStyle={{ color: '#e2e8f0' }}
-                      formatter={(value) => `${value.toFixed(1)}%`}
-                    />
-                    <Bar dataKey="risk" radius={[8, 8, 0, 0]}>
-                      {[
-                        result.disease_predictions.heart_disease,
-                        result.disease_predictions.diabetes,
-                        result.disease_predictions.stroke
-                      ].map((value, index) => (
-                        <Cell 
-                          key={`cell-${index}`}
-                          fill={value > 0.7 ? '#ef4444' : value > 0.4 ? '#f59e0b' : '#10b981'}
-                        />
-                      ))}
-                    </Bar>
-                    <Line type="monotone" dataKey="threshold" stroke="#dc2626" strokeWidth={2} strokeDasharray="5 5" dot={false} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex items-center justify-center gap-6 mt-4 text-xs">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                  <span className="text-slate-400">Low Risk (&lt;40%)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                  <span className="text-slate-400">Moderate (40-70%)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                  <span className="text-slate-400">High Risk (&gt;70%)</span>
+            {/* Disease Header */}
+            <div className="bg-gradient-to-r from-violet-900/40 via-blue-900/30 to-indigo-900/40 backdrop-blur-sm rounded-2xl p-6 border border-violet-700/40 mb-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    🔬 Disease Risk Assessment
+                    <span className="text-xs font-normal px-2 py-0.5 bg-violet-500/20 rounded-full text-violet-300 border border-violet-500/20">AI-Powered</span>
+                  </h3>
+                  <p className="text-sm text-slate-400 mt-1">
+                    Comprehensive disease risk predictions from ML models trained on clinical datasets
+                  </p>
                 </div>
               </div>
             </div>
 
-            {/* Pie Charts - Individual Disease Breakdowns */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Heart Disease Pie */}
-              <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/40">
-                <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                  ❤️‍🩹 Heart Disease
+            {/* Charts Row: Radar + Bar side by side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Radar Chart */}
+              <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/40">
+                <h4 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
+                  📊 Multi-Disease Risk Profile
                 </h4>
-                <div className="w-full h-40">
+                <div className="w-full h-80 flex items-center justify-center">
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Risk', value: result.disease_predictions.heart_disease * 100 },
-                          { name: 'Safe', value: (1 - result.disease_predictions.heart_disease) * 100 }
-                        ]}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={30}
-                        outerRadius={60}
-                        paddingAngle={2}
-                        dataKey="value"
-                      >
-                        <Cell fill={result.disease_predictions.heart_disease > 0.7 ? '#ef4444' : result.disease_predictions.heart_disease > 0.4 ? '#f59e0b' : '#10b981'} />
-                        <Cell fill="#334155" />
-                      </Pie>
-                      <Tooltip formatter={(value) => `${value.toFixed(1)}%`} />
-                    </PieChart>
+                    <RadarChart data={[
+                      { disease: 'Heart', risk: (result.disease_predictions.heart_disease * 100).toFixed(1), fullMark: 100 },
+                      { disease: 'Diabetes', risk: (result.disease_predictions.diabetes * 100).toFixed(1), fullMark: 100 },
+                      { disease: 'Stroke', risk: (result.disease_predictions.stroke * 100).toFixed(1), fullMark: 100 },
+                      { disease: 'Overall', risk: (result.risk_score * 100).toFixed(1), fullMark: 100 },
+                    ]}>
+                      <PolarGrid stroke="#475569" />
+                      <PolarAngleAxis dataKey="disease" tick={{ fill: '#cbd5e1', fontSize: 12 }} />
+                      <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                      <Radar name="Risk %" dataKey="risk" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.6} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }}
+                        labelStyle={{ color: '#e2e8f0' }}
+                      />
+                    </RadarChart>
                   </ResponsiveContainer>
                 </div>
-                <p className="text-center text-lg font-bold text-white mt-2">
-                  {(result.disease_predictions.heart_disease * 100).toFixed(1)}%
-                </p>
-                <p className={`text-center text-xs font-medium ${
-                  result.disease_predictions.heart_disease > 0.7 ? 'text-red-400' :
-                  result.disease_predictions.heart_disease > 0.4 ? 'text-amber-400' :
-                  'text-emerald-400'
-                }`}>
-                  {result.disease_predictions.heart_disease > 0.7 ? 'High Risk' :
-                   result.disease_predictions.heart_disease > 0.4 ? 'Moderate Risk' :
-                   'Low Risk'}
-                </p>
               </div>
 
-              {/* Diabetes Pie */}
-              <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/40">
-                <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                  💉 Diabetes
+              {/* Bar Chart */}
+              <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/40">
+                <h4 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
+                  📈 Risk Comparison
                 </h4>
-                <div className="w-full h-40">
+                <div className="w-full h-72">
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Risk', value: result.disease_predictions.diabetes * 100 },
-                          { name: 'Safe', value: (1 - result.disease_predictions.diabetes) * 100 }
-                        ]}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={30}
-                        outerRadius={60}
-                        paddingAngle={2}
-                        dataKey="value"
-                      >
-                        <Cell fill={result.disease_predictions.diabetes > 0.7 ? '#ef4444' : result.disease_predictions.diabetes > 0.4 ? '#f59e0b' : '#10b981'} />
-                        <Cell fill="#334155" />
-                      </Pie>
-                      <Tooltip formatter={(value) => `${value.toFixed(1)}%`} />
-                    </PieChart>
+                    <BarChart data={[
+                      { name: 'Heart Disease', risk: result.disease_predictions.heart_disease * 100, threshold: 70 },
+                      { name: 'Diabetes', risk: result.disease_predictions.diabetes * 100, threshold: 70 },
+                      { name: 'Stroke', risk: result.disease_predictions.stroke * 100, threshold: 70 },
+                    ]}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                      <XAxis dataKey="name" tick={{ fill: '#cbd5e1', fontSize: 11 }} />
+                      <YAxis tick={{ fill: '#cbd5e1', fontSize: 11 }} domain={[0, 100]} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }}
+                        labelStyle={{ color: '#e2e8f0' }}
+                        formatter={(value) => `${value.toFixed(1)}%`}
+                      />
+                      <Bar dataKey="risk" radius={[8, 8, 0, 0]}>
+                        {[
+                          result.disease_predictions.heart_disease,
+                          result.disease_predictions.diabetes,
+                          result.disease_predictions.stroke
+                        ].map((value, index) => (
+                          <Cell 
+                            key={`cell-${index}`}
+                            fill={value > 0.7 ? '#ef4444' : value > 0.4 ? '#f59e0b' : '#10b981'}
+                          />
+                        ))}
+                      </Bar>
+                      <Line type="monotone" dataKey="threshold" stroke="#dc2626" strokeWidth={2} strokeDasharray="5 5" dot={false} />
+                    </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <p className="text-center text-lg font-bold text-white mt-2">
-                  {(result.disease_predictions.diabetes * 100).toFixed(1)}%
-                </p>
-                <p className={`text-center text-xs font-medium ${
-                  result.disease_predictions.diabetes > 0.7 ? 'text-red-400' :
-                  result.disease_predictions.diabetes > 0.4 ? 'text-amber-400' :
-                  'text-emerald-400'
-                }`}>
-                  {result.disease_predictions.diabetes > 0.7 ? 'High Risk' :
-                   result.disease_predictions.diabetes > 0.4 ? 'Moderate Risk' :
-                   'Low Risk'}
-                </p>
+                <div className="flex items-center justify-center gap-6 mt-4 text-xs">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                    <span className="text-slate-400">Low Risk (&lt;40%)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                    <span className="text-slate-400">Moderate (40-70%)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                    <span className="text-slate-400">High Risk (&gt;70%)</span>
+                  </div>
+                </div>
               </div>
+            </div>
 
-              {/* Stroke Pie */}
-              <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/40">
-                <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                  🧠 Stroke
-                </h4>
-                <div className="w-full h-40">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Risk', value: result.disease_predictions.stroke * 100 },
-                          { name: 'Safe', value: (1 - result.disease_predictions.stroke) * 100 }
-                        ]}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={30}
-                        outerRadius={60}
-                        paddingAngle={2}
-                        dataKey="value"
-                      >
-                        <Cell fill={result.disease_predictions.stroke > 0.7 ? '#ef4444' : result.disease_predictions.stroke > 0.4 ? '#f59e0b' : '#10b981'} />
-                        <Cell fill="#334155" />
-                      </Pie>
-                      <Tooltip formatter={(value) => `${value.toFixed(1)}%`} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <p className="text-center text-lg font-bold text-white mt-2">
-                  {(result.disease_predictions.stroke * 100).toFixed(1)}%
-                </p>
-                <p className={`text-center text-xs font-medium ${
-                  result.disease_predictions.stroke > 0.7 ? 'text-red-400' :
-                  result.disease_predictions.stroke > 0.4 ? 'text-amber-400' :
-                  'text-emerald-400'
-                }`}>
-                  {result.disease_predictions.stroke > 0.7 ? 'High Risk' :
-                   result.disease_predictions.stroke > 0.4 ? 'Moderate Risk' :
-                   'Low Risk'}
-                </p>
-              </div>
+            {/* Pie Charts — 3 columns side by side */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <DiseasePie title="Heart Disease" icon="❤️‍🩹" probability={result.disease_predictions.heart_disease} />
+              <DiseasePie title="Diabetes" icon="💉" probability={result.disease_predictions.diabetes} />
+              <DiseasePie title="Stroke" icon="🧠" probability={result.disease_predictions.stroke} />
             </div>
 
             {/* Risk Timeline Projection */}
-            <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/40">
+            <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/40 mb-6">
               <h4 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-4">
                 📅 Risk Projection Timeline
               </h4>
-              <div className="w-full h-64">
+              <div className="w-full h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={[
                     { period: 'Current', heart: result.disease_predictions.heart_disease * 100, diabetes: result.disease_predictions.diabetes * 100, stroke: result.disease_predictions.stroke * 100 },
@@ -881,26 +742,16 @@ function ResultsView({ result, formData, onReset }) {
               </p>
             </div>
 
-            {/* Multi-Disease Analysis - Top 5 Probable Conditions */}
+            {/* Multi-Disease Analysis - Top 5 */}
             {result.disease_predictions?.multi_disease_top5 && result.disease_predictions.multi_disease_top5.length > 0 && (
-              <div className="bg-gradient-to-br from-indigo-900/40 to-purple-900/40 backdrop-blur-sm rounded-2xl p-5 border border-indigo-700/40">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-300 uppercase tracking-widest flex items-center gap-2">
-                      🔬 Advanced Multi-Disease Analysis
-                    </h4>
-                    <p className="text-xs text-slate-400 mt-1">
-                      AI model trained on 41 diseases, analyzing symptoms from clinical data
-                    </p>
-                  </div>
-                  <div className="px-3 py-1 bg-indigo-500/20 rounded-full">
-                    <span className="text-xs font-bold text-indigo-400">
-                      {result.disease_predictions.multi_disease_top5.length} matches
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
+              <div className="bg-gradient-to-br from-indigo-900/40 to-purple-900/40 backdrop-blur-sm rounded-2xl p-6 border border-indigo-700/40 mb-6">
+                <SectionHeader 
+                  icon="🔬" 
+                  title="Advanced Multi-Disease Analysis" 
+                  subtitle="AI model trained on 41 diseases, analyzing symptoms from clinical data"
+                  badge={`${result.disease_predictions.multi_disease_top5.length} matches`}
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {result.disease_predictions.multi_disease_top5.map((disease, index) => {
                     const probability = disease.probability * 100
                     const getRiskColor = (prob) => {
@@ -918,30 +769,21 @@ function ResultsView({ result, formData, onReset }) {
                               <span className={`text-sm font-bold ${colors.text}`}>#{index + 1}</span>
                             </div>
                             <div>
-                              <p className={`text-sm font-bold ${colors.text}`}>
-                                {disease.disease}
-                              </p>
+                              <p className={`text-sm font-bold ${colors.text}`}>{disease.disease}</p>
                               <p className="text-xs text-slate-400">
                                 {probability > 60 ? 'High probability' : probability > 30 ? 'Moderate probability' : 'Possible match'}
                               </p>
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className={`text-lg font-black ${colors.text}`}>
-                              {probability.toFixed(1)}%
-                            </p>
+                            <p className={`text-lg font-black ${colors.text}`}>{probability.toFixed(1)}%</p>
                             <p className="text-[10px] text-slate-500">confidence</p>
                           </div>
                         </div>
-                        
-                        {/* Probability Bar */}
                         <div className="mt-3 h-2 bg-slate-700/50 rounded-full overflow-hidden">
                           <div
                             className="h-full rounded-full transition-all duration-1000 ease-out"
-                            style={{
-                              width: `${probability}%`,
-                              backgroundColor: colors.bar,
-                            }}
+                            style={{ width: `${probability}%`, backgroundColor: colors.bar }}
                           />
                         </div>
                       </div>
@@ -949,7 +791,6 @@ function ResultsView({ result, formData, onReset }) {
                   })}
                 </div>
 
-                {/* Info Note */}
                 <div className="mt-4 p-3 bg-slate-900/50 rounded-xl border border-slate-700/30">
                   <p className="text-xs text-slate-400">
                     <span className="font-semibold text-indigo-400">How it works:</span> This model analyzes 
@@ -962,7 +803,7 @@ function ResultsView({ result, formData, onReset }) {
             )}
             
             {/* Disclaimer */}
-            <div className="bg-blue-900/20 border border-blue-700/30 rounded-xl p-4">
+            <div className="bg-blue-900/20 border border-blue-700/30 rounded-xl p-4 mb-6">
               <p className="text-xs text-blue-300">
                 <span className="font-semibold">Clinical Note:</span> These predictions are generated by ML models trained on clinical datasets. 
                 They complement but do not replace professional clinical judgment. Please consult healthcare providers for diagnosis and treatment decisions.
@@ -970,29 +811,6 @@ function ResultsView({ result, formData, onReset }) {
             </div>
           </>
         )}
-
-        {/* Vitals Overview */}
-        <div>
-          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-3 px-1">Current Vitals</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <VitalsChart label="Heart Rate" value={formData.heart_rate} unit="BPM" min={60} max={100} color="#ef4444" />
-            <VitalsChart label="SpO₂" value={formData.spo2} unit="%" min={95} max={100} color="#3b82f6" />
-            <VitalsChart label="Systolic BP" value={formData.systolic_bp} unit="mmHg" min={90} max={140} color="#8b5cf6" />
-            <VitalsChart label="Temp" value={formData.temperature} unit="°C" min={36.1} max={37.5} color="#f59e0b" />
-          </div>
-        </div>
-
-        {/* Patient Info */}
-        <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl p-5 border border-slate-700/40">
-          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-3">Patient Info</h3>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div><span className="text-slate-500">Age:</span> <span className="text-white font-medium">{formData.age}</span></div>
-            <div><span className="text-slate-500">Gender:</span> <span className="text-white font-medium">{formData.gender}</span></div>
-            <div><span className="text-slate-500">Smoking:</span> <span className="text-white font-medium">{formData.smoking_status}</span></div>
-            <div><span className="text-slate-500">Diabetes:</span> <span className="text-white font-medium">{formData.diabetes}</span></div>
-            <div><span className="text-slate-500">Hypertension:</span> <span className="text-white font-medium">{formData.hypertension}</span></div>
-          </div>
-        </div>
       </div>
 
       <PrivacyBadge />
@@ -1098,21 +916,19 @@ export default function App() {
           clearInterval(progressInterval)
           return 95
         }
-        // Smoother progress: fast at start, slower near end
         const increment = prev < 50 ? 8 : prev < 80 ? 4 : 2
         return Math.min(prev + increment, 95)
       })
-    }, 250) // Update every 250ms
+    }, 250)
 
     try {
-      // Wait minimum 5 seconds for visual effect
       const [apiResponse] = await Promise.all([
         fetch(`${API_URL}/api/evaluate-risk`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         }),
-        new Promise(resolve => setTimeout(resolve, 5000)) // Minimum 5 second delay
+        new Promise(resolve => setTimeout(resolve, 5000))
       ])
 
       clearInterval(progressInterval)
@@ -1126,7 +942,6 @@ export default function App() {
           if (typeof errData.detail === 'string') {
             errorMessage = errData.detail
           } else if (Array.isArray(errData.detail)) {
-            // Pydantic validation errors are arrays
             const errors = errData.detail.map(err => {
               const field = err.loc ? err.loc.join(' → ') : 'Unknown field'
               return `${field}: ${err.msg}`
@@ -1140,8 +955,6 @@ export default function App() {
       }
 
       const data = await apiResponse.json()
-      
-      // Brief pause at 100% before showing results
       await new Promise(resolve => setTimeout(resolve, 300))
       setResult(data)
     } catch (err) {
@@ -1166,7 +979,7 @@ export default function App() {
     return <LoadingAnalysis progress={loadingProgress} />
   }
 
-  // ─── Results View (Always show detailed view now) ────────────────
+  // ─── Results View ────────────────────────────────────────────────
   if (result) {
     return (
       <>
@@ -1184,7 +997,7 @@ export default function App() {
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 pb-24">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-xl border-b border-slate-800/50">
-        <div className="max-w-lg mx-auto px-4 py-4">
+        <div className="max-w-2xl mx-auto px-4 py-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center shadow-lg shadow-violet-600/20">
               <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1199,7 +1012,7 @@ export default function App() {
         </div>
       </header>
 
-      <form onSubmit={handleSubmit} className="max-w-lg mx-auto px-4 pt-6 space-y-6">
+      <form onSubmit={handleSubmit} className="max-w-2xl mx-auto px-4 pt-6 space-y-6">
         {/* Sample Data Button */}
         <div className="flex justify-end">
           <button
