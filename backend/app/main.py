@@ -1085,11 +1085,7 @@ def build_jarvis_realtime_session_config(risk_context: dict | None = None) -> di
     return {
         "type": "realtime",
         "model": JARVIS_REALTIME_MODEL,
-        "modalities": ["audio", "text"],
         "instructions": build_jarvis_system_prompt(risk_context),
-        "voice": JARVIS_REALTIME_VOICE,
-        "turn_detection": {"type": "server_vad"},
-        "input_audio_transcription": {"model": "whisper-1"},
     }
 
 
