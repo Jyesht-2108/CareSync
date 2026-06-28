@@ -1137,7 +1137,7 @@ async def jarvis_realtime_session(request: Request):
                 )
 
             session_data = token_response.json()
-            ephemeral_token = session_data.get("client_secret", {}).get("value")
+            ephemeral_token = session_data.get("value") or session_data.get("client_secret", {}).get("value")
             
             if not ephemeral_token:
                 print(f"\n\n=== JARVIS OPENAI TOKEN MISSING ===\n{token_response.text}\n===================================\n\n")
