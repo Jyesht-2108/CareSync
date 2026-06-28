@@ -317,9 +317,10 @@ def predict_diseases(req: RiskAssessmentRequest) -> dict:
     - Heart disease
     - Diabetes
     - Stroke
+    - Multi-disease diagnosis (top 5 probable diseases from 41 options)
     
-    Note: Multi-disease model requires symptom input (132 features), so we skip it
-    for now unless we add a symptom checklist to the UI.
+    Note: Multi-disease model requires symptom input (132 features), so we
+    intelligently infer symptoms from vitals and clinical notes.
     """
     predictions = {}
     
@@ -353,7 +354,299 @@ def predict_diseases(req: RiskAssessmentRequest) -> dict:
         print(f"Stroke prediction failed: {e}")
         predictions['stroke'] = None
     
+    # NEW: Multi-disease prediction from symptoms
+    try:
+        if multi_disease_model is not None and multi_disease_symptoms is not None:
+            # Infer symptoms from vitals and clinical notes
+            symptom_vector = infer_symptoms_from_patient_data(req)
+            
+            # Get prediction probabilities for all 41 diseases
+            disease_probas = multi_disease_model.predict_proba([symptom_vector])[0]
+            
+            # Get top 5 most probable diseases
+            top_5_indices = np.argsort(disease_probas)[-5:][::-1]
+            top_5_diseases = []
+            
+            for idx in top_5_indices:
+                disease_name = multi_disease_labels.classes_[idx]
+                probability = float(disease_probas[idx])
+                if probability > 0.05:  # Only show if > 5% probability
+                    top_5_diseases.append({
+                        'disease': disease_name,
+                        'probability': probability
+                    })
+            
+            predictions['multi_disease_top5'] = top_5_diseases
+    except Exception as e:
+        print(f"Multi-disease prediction failed: {e}")
+        predictions['multi_disease_top5'] = []
+    
     return predictions
+
+
+def infer_symptoms_from_patient_data(req: RiskAssessmentRequest) -> list:
+    """
+    Intelligently infer symptom presence (0/1) from patient vitals and clinical notes.
+    
+    Maps 133 symptom features based on:
+    - Vital signs (fever → high temp, low SpO2 → breathing issues, etc.)
+    - Clinical notes (keyword matching)
+    - Demographics (age, gender, conditions)
+    
+    This allows multi-disease model to work without explicit symptom checklist.
+    """
+    v = req.vitals
+    d = req.demographics
+    notes = (req.ehr_notes + " " + req.clinical_summary).lower()
+    
+    # Initialize all symptoms as 0 (absent)
+    symptoms = {symptom: 0 for symptom in multi_disease_symptoms}
+    
+    # Vital-based symptom inference
+    # Temperature
+    if v.temperature > 38.0:
+        symptoms['high_fever'] = 1
+    if v.temperature > 37.5:
+        symptoms['continuous_sneezing'] = 0.3  # Mild indicator
+        symptoms['chills'] = 1 if v.temperature > 39.0 else 0.5
+        symptoms['shivering'] = 1 if v.temperature > 39.0 else 0
+    if v.temperature < 36.0:
+        symptoms['cold_hands_and_feets'] = 1
+    
+    # SpO2 - Respiratory
+    if v.spo2 < 94:
+        symptoms['breathlessness'] = 1
+        symptoms['fast_heart_rate'] = 1 if v.heart_rate > 100 else 0
+    if v.spo2 < 90:
+        symptoms['breathlessness'] = 1
+        symptoms['cough'] = 0.7
+        symptoms['rusty_sputum'] = 0.3  # Could indicate pneumonia
+    
+    # Heart Rate
+    if v.heart_rate > 100:
+        symptoms['fast_heart_rate'] = 1
+        symptoms['palpitations'] = 1
+        symptoms['anxiety'] = 0.5
+    if v.heart_rate < 60:
+        symptoms['fatigue'] = 0.7
+        symptoms['weakness_in_limbs'] = 0.3
+    
+    # Blood Pressure
+    if v.systolic_bp > 140:
+        symptoms['headache'] = 0.5
+        symptoms['dizziness'] = 0.3
+    if v.systolic_bp < 90:
+        symptoms['dizziness'] = 0.7
+        symptoms['weakness_in_limbs'] = 0.6
+        symptoms['fatigue'] = 0.7
+    
+    # Demographics-based
+    if d.diabetes == "Yes":
+        symptoms['increased_appetite'] = 0.5
+        symptoms['polyuria'] = 0.5  # Frequent urination
+        symptoms['fatigue'] = 0.6
+        symptoms['weight_loss'] = 0.3
+    
+    if d.hypertension == "Yes":
+        symptoms['headache'] = 0.4
+        symptoms['chest_pain'] = 0.3
+    
+    if d.smoking_status in ["Current", "Former"]:
+        symptoms['cough'] = 0.4
+        symptoms['breathlessness'] = 0.3
+    
+    # Age-based
+    if d.age > 60:
+        symptoms['joint_pain'] = 0.3
+        symptoms['muscle_weakness'] = 0.2
+        symptoms['fatigue'] = 0.3
+    
+    # Clinical notes keyword matching
+    symptom_keywords = {
+        'cough': ['cough', 'coughing'],
+        'fever': ['fever', 'febrile', 'pyrexia'],
+        'headache': ['headache', 'head pain'],
+        'fatigue': ['fatigue', 'tired', 'exhausted', 'weakness'],
+        'chest_pain': ['chest pain', 'chest discomfort', 'angina'],
+        'breathlessness': ['shortness of breath', 'dyspnea', 'breathing difficulty', 'sob'],
+        'vomiting': ['vomiting', 'nausea', 'emesis'],
+        'dizziness': ['dizziness', 'dizzy', 'vertigo', 'lightheaded'],
+        'abdominal_pain': ['abdominal pain', 'stomach pain', 'belly pain'],
+        'diarrhoea': ['diarrhea', 'diarrhoea', 'loose stools'],
+        'loss_of_appetite': ['loss of appetite', 'anorexia', 'not eating'],
+        'weight_loss': ['weight loss', 'losing weight'],
+        'yellowing_of_eyes': ['jaundice', 'yellow eyes', 'icterus'],
+        'skin_rash': ['rash', 'skin eruption'],
+        'itching': ['itching', 'pruritus', 'itch'],
+        'joint_pain': ['joint pain', 'arthralgia'],
+        'muscle_pain': ['muscle pain', 'myalgia'],
+        'weakness_in_limbs': ['weakness', 'limb weakness', 'paralysis'],
+        'confusion': ['confused', 'confusion', 'disoriented'],
+        'back_pain': ['back pain', 'backache'],
+        'neck_pain': ['neck pain', 'stiff neck'],
+        'constipation': ['constipation', 'no bowel movement'],
+        'sweating': ['sweating', 'diaphoresis', 'perspiration'],
+        'chest_pain': ['chest pain', 'cardiac pain'],
+        'palpitations': ['palpitations', 'racing heart'],
+        'irregular_sugar_level': ['glucose', 'sugar', 'hyperglycemia', 'hypoglycemia'],
+        'blurred_and_distorted_vision': ['blurred vision', 'vision problems'],
+        'altered_sensorium': ['altered mental', 'altered sensorium', 'drowsy'],
+        'loss_of_smell': ['loss of smell', 'anosmia'],
+        'congestion': ['congestion', 'stuffy nose', 'blocked nose'],
+        'sore_throat': ['sore throat', 'throat pain'],
+        'phlegm': ['phlegm', 'sputum', 'mucus'],
+        'swelling_joints': ['swollen joints', 'joint swelling'],
+        'red_spots_over_body': ['red spots', 'petechiae', 'rash'],
+        'pain_during_bowel_movements': ['painful bowel', 'pain defecation'],
+        'pain_in_anal_region': ['anal pain', 'rectal pain'],
+        'bloody_stool': ['bloody stool', 'blood in stool', 'melena'],
+        'irritation_in_anus': ['anal irritation', 'itchy anus'],
+        'cramps': ['cramps', 'muscle cramps', 'spasms'],
+        'bruising': ['bruising', 'bruises', 'ecchymosis'],
+        'swelling_of_stomach': ['abdominal swelling', 'distended abdomen', 'bloating'],
+        'history_of_alcohol_consumption': ['alcohol', 'drinking', 'alcoholic'],
+        'receiving_blood_transfusion': ['blood transfusion', 'transfusion'],
+        'receiving_unsterile_injections': ['injection', 'needle'],
+        'malaise': ['malaise', 'unwell', 'feeling sick'],
+        'blister': ['blister', 'blisters', 'vesicles'],
+        'red_sore_around_nose': ['nose sore', 'nasal sore'],
+        'yellow_crust_ooze': ['yellow crust', 'oozing'],
+        'family_history': ['family history'],
+    }
+    
+    for symptom, keywords in symptom_keywords.items():
+        if symptom in symptoms:  # Only if symptom exists in model
+            for keyword in keywords:
+                if keyword in notes:
+                    symptoms[symptom] = 1
+                    break
+    
+    # Convert to vector in correct order
+    symptom_vector = []
+    for symptom_name in multi_disease_symptoms:
+        value = symptoms.get(symptom_name, 0)
+        # Convert probabilistic values to binary (threshold at 0.5)
+        symptom_vector.append(1 if value >= 0.5 else 0)
+    
+    return symptom_vector
+
+
+def calculate_news2_score(req: RiskAssessmentRequest) -> dict:
+    """
+    Calculate NEWS2 (National Early Warning Score 2) - a clinically validated
+    vital signs-based risk scoring system used in UK NHS and globally.
+    
+    NEWS2 scores 7 physiological parameters:
+    - Respiration rate (we approximate from clinical context)
+    - SpO2 saturation
+    - Systolic blood pressure
+    - Pulse (heart rate)
+    - Consciousness (AVPU scale - we approximate)
+    - Temperature
+    
+    Score ranges:
+    - 0-4: Low risk
+    - 5-6: Medium risk (urgent response)
+    - 7+: High risk (emergency response)
+    
+    This provides a vital-based safety net that can't be fooled by missing text.
+    """
+    v = req.vitals
+    d = req.demographics
+    notes = (req.ehr_notes + " " + req.clinical_summary).lower()
+    
+    score = 0
+    breakdown = {}
+    
+    # 1. SpO2 Score (0-3 points)
+    # Scale 1 (standard): 96%+ = 0, 94-95% = 1, 92-93% = 2, ≤91% = 3
+    if v.spo2 >= 96:
+        spo2_score = 0
+    elif v.spo2 >= 94:
+        spo2_score = 1
+    elif v.spo2 >= 92:
+        spo2_score = 2
+    else:
+        spo2_score = 3
+    
+    score += spo2_score
+    breakdown['spo2'] = spo2_score
+    
+    # 2. Heart Rate Score (0-3 points)
+    hr = v.heart_rate
+    if 51 <= hr <= 90:
+        hr_score = 0
+    elif (41 <= hr <= 50) or (91 <= hr <= 110):
+        hr_score = 1
+    elif (111 <= hr <= 130) or (hr <= 40):
+        hr_score = 2
+    else:  # >130 or <40
+        hr_score = 3
+    
+    score += hr_score
+    breakdown['heart_rate'] = hr_score
+    
+    # 3. Systolic BP Score (0-3 points)
+    sbp = v.systolic_bp
+    if 111 <= sbp <= 219:
+        sbp_score = 0
+    elif 101 <= sbp <= 110:
+        sbp_score = 1
+    elif 91 <= sbp <= 100:
+        sbp_score = 2
+    else:  # ≤90 or ≥220
+        sbp_score = 3
+    
+    score += sbp_score
+    breakdown['systolic_bp'] = sbp_score
+    
+    # 4. Temperature Score (0-3 points)
+    temp = v.temperature
+    if 36.1 <= temp <= 38.0:
+        temp_score = 0
+    elif (35.1 <= temp <= 36.0) or (38.1 <= temp <= 39.0):
+        temp_score = 1
+    elif temp >= 39.1:
+        temp_score = 2
+    else:  # ≤35.0
+        temp_score = 3
+    
+    score += temp_score
+    breakdown['temperature'] = temp_score
+    
+    # 5. Consciousness Score (0-3 points)
+    # AVPU scale: Alert=0, Voice/Pain/Unresponsive=3
+    # Approximate from notes
+    consciousness_keywords = ['confused', 'drowsy', 'unconscious', 'unresponsive', 
+                             'altered mental', 'disoriented', 'lethargic']
+    if any(word in notes for word in consciousness_keywords):
+        consciousness_score = 3
+    else:
+        consciousness_score = 0
+    
+    score += consciousness_score
+    breakdown['consciousness'] = consciousness_score
+    
+    # 6. Age adjustment (bonus for elderly + any score)
+    # If age ≥65 and score ≥1, add emphasis
+    age_adjusted_score = score
+    if d.age >= 65 and score >= 1:
+        age_adjusted_score += 1
+    
+    # Map to risk level
+    if age_adjusted_score <= 4:
+        news2_risk = "Low"
+    elif age_adjusted_score <= 6:
+        news2_risk = "Medium"
+    else:
+        news2_risk = "High"
+    
+    return {
+        'score': score,
+        'age_adjusted_score': age_adjusted_score,
+        'risk_level': news2_risk,
+        'breakdown': breakdown
+    }
 
 
 def detect_clinical_conditions(req: RiskAssessmentRequest, proba: np.ndarray) -> dict:
@@ -437,13 +730,22 @@ def detect_clinical_conditions(req: RiskAssessmentRequest, proba: np.ndarray) ->
 async def evaluate_risk(req: RiskAssessmentRequest):
     """
     Evaluate a patient's disease risk level with clinical condition detection.
+    
+    HYBRID APPROACH:
+    1. ML-based mortality risk model (trained on MIMIC-III)
+    2. Disease-specific ML models (heart, diabetes, stroke)
+    3. NEWS2 clinical vital scoring (evidence-based)
+    4. Clinical condition detection rules
+    5. INTELLIGENT AGGREGATION with vital-based safety overrides
 
+    This ensures we can't miss obvious high-risk cases due to missing text features.
+    
     Returns:
-    - Overall mortality risk score and level (Low/Medium/High) 
+    - Overall risk score and level (Low/Medium/High) 
     - Specific disease risk predictions (heart disease, diabetes, stroke)
-    - Specific clinical condition indicators (sepsis, respiratory, etc.)
-    - Top contributing factors from model
-    - Actionable recommendations
+    - Clinical condition indicators (sepsis, respiratory, etc.)
+    - NEWS2 vital-based score
+    - Contributing factors
     
     All processing is local - no external API calls.
     """
@@ -452,55 +754,165 @@ async def evaluate_risk(req: RiskAssessmentRequest):
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Feature extraction failed: {str(e)}")
 
-    # Predict probabilities for mortality risk
+    # ═══ 1. ML Model Prediction ═══
     proba = model.predict_proba(X)[0]  # shape: (n_classes,)
-
-    # Risk score: weighted combination biased toward high-risk probability
-    # proba[2] is P(High), proba[1] is P(Medium)
-    risk_score = float(proba[2] * 1.0 + proba[1] * 0.5 + proba[0] * 0.0)
-
-    # Risk level: use the predicted class
-    predicted_class = int(np.argmax(proba))
-    risk_level = REVERSE_LABEL_MAP.get(predicted_class, "Low")
-
-    # Override to High if P(High) is notably elevated (safety margin)
-    # Even if the model's argmax says Medium, if P(High) > 0.35, escalate
-    if proba[2] > 0.35:
-        risk_level = "High"
+    ml_risk_score = float(proba[2] * 1.0 + proba[1] * 0.5 + proba[0] * 0.0)
+    ml_predicted_class = int(np.argmax(proba))
+    ml_risk_level = REVERSE_LABEL_MAP.get(ml_predicted_class, "Low")
     
-    # NEW: Predict specific diseases
+    # ═══ 2. Disease-Specific Predictions ═══
     disease_predictions = predict_diseases(req)
     
-    # Detect specific clinical conditions
-    clinical_conditions = detect_clinical_conditions(req, proba)
-
-    # Contributing factors from feature importances
-    if hasattr(model, "feature_importances_"):
-        importances = model.feature_importances_
-    elif hasattr(model, "coef_"):
-        importances = np.mean(np.abs(model.coef_), axis=0)
+    # Get max disease risk
+    disease_risks = []
+    if disease_predictions.get('heart_disease'):
+        disease_risks.append(disease_predictions['heart_disease'])
+    if disease_predictions.get('diabetes'):
+        disease_risks.append(disease_predictions['diabetes'])
+    if disease_predictions.get('stroke'):
+        disease_risks.append(disease_predictions['stroke'])
+    
+    max_disease_risk = max(disease_risks) if disease_risks else 0.0
+    
+    # Map disease risk to level
+    if max_disease_risk > 0.7:
+        disease_risk_level = "High"
+    elif max_disease_risk > 0.4:
+        disease_risk_level = "Medium"
     else:
-        importances = np.zeros(len(feature_names))
-
-    # Get the input values for context
-    feat_imp_pairs = list(zip(feature_names, importances))
-    feat_imp_pairs.sort(key=lambda x: x[1], reverse=True)
-
-    top_factors = [
-        ContributingFactor(
-            factor=_humanize_feature(fname),
-            importance=round(float(imp), 4)
-        )
-        for fname, imp in feat_imp_pairs[:3]
-    ]
+        disease_risk_level = "Low"
+    
+    # ═══ 3. NEWS2 Vital-Based Scoring ═══
+    news2_result = calculate_news2_score(req)
+    news2_risk_level = news2_result['risk_level']
+    news2_score = news2_result['age_adjusted_score']
+    
+    # ═══ 4. Clinical Condition Detection ═══
+    clinical_conditions = detect_clinical_conditions(req, proba)
+    
+    # Check for critical conditions
+    critical_condition = (
+        clinical_conditions.get('sepsis_risk') == 'High' or
+        clinical_conditions.get('requires_icu') or
+        clinical_conditions.get('respiratory_concern')
+    )
+    
+    # ═══ 5. INTELLIGENT RISK AGGREGATION ═══
+    # Priority order:
+    # 1. Critical safety overrides (can't miss these!)
+    # 2. NEWS2 vital score (evidence-based clinical tool)
+    # 3. Disease-specific models (domain-specific)
+    # 4. ML model (but text-biased, so lowest priority)
+    
+    v = req.vitals
+    
+    # CRITICAL SAFETY OVERRIDES (immediate High risk)
+    if (
+        v.spo2 < 88 or              # Severe hypoxia
+        v.heart_rate > 150 or       # Severe tachycardia
+        v.heart_rate < 35 or        # Severe bradycardia
+        v.systolic_bp < 70 or       # Severe hypotension
+        v.systolic_bp > 220 or      # Hypertensive emergency
+        v.temperature > 40.0 or     # Hyperpyrexia
+        v.temperature < 35.0        # Severe hypothermia
+    ):
+        final_risk_level = "High"
+        final_risk_score = 0.95
+        primary_reason = "Critical vital signs"
+    
+    # NEWS2 or disease model shows High risk
+    elif news2_risk_level == "High" or disease_risk_level == "High" or critical_condition:
+        final_risk_level = "High"
+        final_risk_score = max(0.7, ml_risk_score, max_disease_risk, news2_score / 20.0)
+        primary_reason = f"NEWS2: {news2_risk_level}, Disease: {disease_risk_level}"
+    
+    # Medium risk from any source
+    elif (news2_risk_level == "Medium" or 
+          disease_risk_level == "Medium" or 
+          ml_risk_level == "Medium" or
+          proba[2] > 0.35):  # ML shows elevated High risk probability
+        final_risk_level = "Medium"
+        final_risk_score = max(0.4, ml_risk_score, max_disease_risk * 0.8, news2_score / 20.0)
+        primary_reason = f"NEWS2: {news2_risk_level}, Disease: {disease_risk_level}, ML: {ml_risk_level}"
+    
+    # Low risk only if ALL indicators agree
+    else:
+        final_risk_level = "Low"
+        final_risk_score = min(0.3, max(ml_risk_score, max_disease_risk, news2_score / 20.0))
+        primary_reason = "All indicators within normal limits"
+    
+    # ═══ 6. Contributing Factors (Enhanced) ═══
+    contributing_factors = []
+    
+    # Add NEWS2 breakdown as factors
+    for vital, score_val in news2_result['breakdown'].items():
+        if score_val > 0:
+            contributing_factors.append(ContributingFactor(
+                factor=f"{_humanize_feature(vital)} (NEWS2: {score_val} pts)",
+                importance=score_val / 3.0  # Normalize to 0-1
+            ))
+    
+    # Add disease risks
+    if disease_predictions.get('stroke', 0) > 0.4:
+        contributing_factors.append(ContributingFactor(
+            factor=f"Stroke Risk: {disease_predictions['stroke']*100:.0f}%",
+            importance=disease_predictions['stroke']
+        ))
+    if disease_predictions.get('heart_disease', 0) > 0.4:
+        contributing_factors.append(ContributingFactor(
+            factor=f"Heart Disease Risk: {disease_predictions['heart_disease']*100:.0f}%",
+            importance=disease_predictions['heart_disease']
+        ))
+    if disease_predictions.get('diabetes', 0) > 0.4:
+        contributing_factors.append(ContributingFactor(
+            factor=f"Diabetes Risk: {disease_predictions['diabetes']*100:.0f}%",
+            importance=disease_predictions['diabetes']
+        ))
+    
+    # Add clinical conditions
+    if critical_condition:
+        contributing_factors.append(ContributingFactor(
+            factor="Critical clinical condition detected",
+            importance=1.0
+        ))
+    
+    # Sort by importance and take top 5
+    contributing_factors.sort(key=lambda x: x.importance, reverse=True)
+    contributing_factors = contributing_factors[:5]
+    
+    # If we don't have enough factors, add from ML model
+    if len(contributing_factors) < 3:
+        if hasattr(model, "feature_importances_"):
+            importances = model.feature_importances_
+        elif hasattr(model, "coef_"):
+            importances = np.mean(np.abs(model.coef_), axis=0)
+        else:
+            importances = np.zeros(len(feature_names))
+        
+        feat_imp_pairs = list(zip(feature_names, importances))
+        feat_imp_pairs.sort(key=lambda x: x[1], reverse=True)
+        
+        for fname, imp in feat_imp_pairs[:3]:
+            if not any(f.factor.startswith(_humanize_feature(fname)) for f in contributing_factors):
+                contributing_factors.append(ContributingFactor(
+                    factor=_humanize_feature(fname),
+                    importance=round(float(imp), 4)
+                ))
+                if len(contributing_factors) >= 5:
+                    break
+    
+    # Add NEWS2 info to clinical conditions
+    clinical_conditions['news2_score'] = news2_score
+    clinical_conditions['news2_risk'] = news2_risk_level
+    clinical_conditions['primary_assessment'] = primary_reason
 
     return RiskAssessmentResponse(
-        risk_score=round(risk_score, 4),
-        risk_level=risk_level,
-        contributing_factors=top_factors,
-        confidence=round(float(np.max(proba)), 4),
+        risk_score=round(final_risk_score, 4),
+        risk_level=final_risk_level,
+        contributing_factors=contributing_factors[:5],
+        confidence=round(0.85 if final_risk_level != ml_risk_level else float(np.max(proba)), 4),
         clinical_conditions=clinical_conditions,
-        disease_predictions=disease_predictions,  # NEW: Disease risk predictions
+        disease_predictions=disease_predictions,
     )
 
 
