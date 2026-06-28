@@ -818,7 +818,13 @@ async def evaluate_risk(req: RiskAssessmentRequest):
     ):
         final_risk_level = "High"
         final_risk_score = 0.95
-        primary_reason = "Critical vital signs"
+        primary_reason = "CRITICAL: Vital signs in dangerous range"
+    
+    # Disease model shows High risk (>70%) even with normal vitals
+    elif disease_risk_level == "High" and news2_risk_level == "Low":
+        final_risk_level = "High"
+        final_risk_score = max(0.7, max_disease_risk)
+        primary_reason = f"High disease risk detected (vitals currently stable)"
     
     # NEWS2 or disease model shows High risk
     elif news2_risk_level == "High" or disease_risk_level == "High" or critical_condition:
